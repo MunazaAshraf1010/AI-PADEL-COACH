@@ -1,0 +1,9 @@
+seaborn 
+ffmpeg
+matplotlib
+opencv-python
+supervision
+ultralytics
+parse
+pims
+plotly

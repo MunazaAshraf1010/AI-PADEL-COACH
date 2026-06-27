@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# Model weights (download separately)
+weights/**/*.pt
+
+# Videos & media
+*.mp4
+*.avi
+*.png
+*.jpg
+
+# Output files
+*.json
+*.csv
+results/
+highlights/
+
+# Notebooks
+*.ipynb
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Training artifacts
+TrackNet/
+dataset/
+runs/
+train/
+models/
+
+# Logs
+*.log

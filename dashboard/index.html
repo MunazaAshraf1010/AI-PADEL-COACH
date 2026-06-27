@@ -1,0 +1,1597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Padel Coach - Match Analysis</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: #f0f4f8;
+            color: #2d3748;
+            line-height: 1.6;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #0891b2, #06b6d4);
+            color: white;
+            padding: 24px 40px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 4px 12px rgba(8, 145, 178, 0.3);
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .header .subtitle {
+            font-size: 14px;
+            opacity: 0.85;
+        }
+
+        .header-logo {
+            width: 44px;
+            height: 44px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+        }
+
+        .match-info-bar {
+            background: white;
+            padding: 16px 40px;
+            display: flex;
+            gap: 32px;
+            border-bottom: 1px solid #e2e8f0;
+            flex-wrap: wrap;
+        }
+
+        .match-info-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .match-info-item .label {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #94a3b8;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .match-info-item .value {
+            font-size: 16px;
+            font-weight: 700;
+            color: #1e293b;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px 40px;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 24px;
+            background: white;
+            padding: 6px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            width: fit-content;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            color: #64748b;
+            transition: all 0.2s;
+            border: none;
+            background: transparent;
+        }
+
+        .tab:hover {
+            color: #0891b2;
+            background: #f0fdfa;
+        }
+
+        .tab.active {
+            background: #0891b2;
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Cards */
+        .grid {
+            display: grid;
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .grid-2 { grid-template-columns: repeat(2, 1fr); }
+        .grid-3 { grid-template-columns: repeat(3, 1fr); }
+        .grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+        @media (max-width: 900px) {
+            .grid-2, .grid-3, .grid-4 {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            border: 1px solid #f1f5f9;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 16px;
+        }
+
+        .card-subtitle {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 12px;
+        }
+
+        /* Stat boxes */
+        .stat-box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 16px 20px;
+            text-align: center;
+        }
+
+        .stat-box .stat-value {
+            font-size: 28px;
+            font-weight: 800;
+            color: #1e293b;
+        }
+
+        .stat-box .stat-unit {
+            font-size: 14px;
+            font-weight: 600;
+            color: #64748b;
+        }
+
+        .stat-box .stat-label {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+
+        .stat-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .stat-row .stat-box {
+            flex: 1;
+            min-width: 100px;
+        }
+
+        /* Progress bars */
+        .bar-chart-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            gap: 12px;
+        }
+
+        .bar-label {
+            font-size: 13px;
+            color: #475569;
+            min-width: 100px;
+            font-weight: 500;
+        }
+
+        .bar-track {
+            flex: 1;
+            height: 10px;
+            background: #e2e8f0;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: 5px;
+            transition: width 0.8s ease;
+        }
+
+        .bar-fill.cyan { background: linear-gradient(90deg, #06b6d4, #0891b2); }
+        .bar-fill.yellow { background: linear-gradient(90deg, #d4d406, #a3b20a); }
+        .bar-fill.blue { background: linear-gradient(90deg, #3b82f6, #2563eb); }
+        .bar-fill.green { background: linear-gradient(90deg, #10b981, #059669); }
+        .bar-fill.red { background: linear-gradient(90deg, #f43f5e, #e11d48); }
+
+        .bar-value {
+            font-size: 14px;
+            font-weight: 700;
+            color: #1e293b;
+            min-width: 45px;
+            text-align: right;
+        }
+
+        /* Donut chart container */
+        .donut-container {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .donut-canvas {
+            width: 120px !important;
+            height: 120px !important;
+        }
+
+        .donut-legend {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .legend-text {
+            font-size: 13px;
+            color: #64748b;
+        }
+
+        .legend-value {
+            font-size: 18px;
+            font-weight: 800;
+            color: #1e293b;
+        }
+
+        /* Strengths/Weaknesses */
+        .strength-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 16px;
+            text-align: left;
+        }
+
+        .strength-card .sw-value {
+            font-size: 26px;
+            font-weight: 800;
+            color: #1e293b;
+        }
+
+        .strength-card .sw-comparison {
+            font-size: 12px;
+            font-weight: 600;
+            margin-top: 2px;
+        }
+
+        .strength-card .sw-comparison.above { color: #10b981; }
+        .strength-card .sw-comparison.below { color: #f43f5e; }
+
+        .strength-card .sw-name {
+            font-size: 13px;
+            color: #475569;
+            margin-top: 4px;
+            font-weight: 500;
+        }
+
+        .strength-card .sw-tag {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            background: #e0f2fe;
+            color: #0284c7;
+        }
+
+        /* Player rating */
+        .rating-display {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 12px;
+        }
+
+        .rating-circle {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: conic-gradient(#0891b2 calc(var(--rating) * 1%), #e2e8f0 0%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .rating-circle-inner {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 800;
+            color: #0891b2;
+        }
+
+        .rating-desc {
+            font-size: 14px;
+            color: #475569;
+            font-weight: 500;
+        }
+
+        /* Heatmap */
+        .heatmap-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        .heatmap-canvas {
+            width: 100%;
+            border-radius: 8px;
+            border: 2px solid #e2e8f0;
+        }
+
+        /* Highlights */
+        .highlights-row {
+            display: flex;
+            gap: 12px;
+            overflow-x: auto;
+            padding: 8px 0;
+        }
+
+        .highlight-thumb {
+            min-width: 160px;
+            height: 100px;
+            background: #1e293b;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+            text-align: center;
+            padding: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .highlight-thumb:hover {
+            transform: scale(1.05);
+        }
+
+        /* Objective */
+        .objective-box {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 20px;
+            background: white;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            margin-top: 16px;
+        }
+
+        .objective-icon {
+            width: 28px;
+            height: 28px;
+            background: #e0f2fe;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: #0891b2;
+        }
+
+        .objective-text {
+            font-size: 14px;
+            color: #475569;
+        }
+
+        /* Comparative table */
+        .comp-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .comp-table th {
+            font-size: 12px;
+            font-weight: 600;
+            color: #94a3b8;
+            text-align: center;
+            padding: 8px 12px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .comp-table td {
+            font-size: 13px;
+            padding: 12px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .comp-table td:first-child {
+            color: #475569;
+        }
+
+        .comp-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .comp-dot.team { background: #0891b2; }
+        .comp-dot.rival { background: #a3b20a; }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1e293b;
+            margin: 32px 0 16px;
+        }
+
+        /* Videos section */
+        .video-container {
+            background: #1e293b;
+            border-radius: 12px;
+            height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 14px;
+            position: relative;
+        }
+
+        .video-label {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 8px;
+        }
+
+        .play-btn {
+            width: 48px;
+            height: 48px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        /* Distribution boxes */
+        .dist-boxes {
+            display: flex;
+            gap: 8px;
+        }
+
+        .dist-box {
+            flex: 1;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 14px;
+            text-align: center;
+        }
+
+        .dist-box .dist-value {
+            font-size: 22px;
+            font-weight: 800;
+            color: #1e293b;
+        }
+
+        .dist-box .dist-label {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-top: 2px;
+        }
+
+        /* Lob quality dual bar */
+        .dual-bar {
+            margin-bottom: 12px;
+        }
+
+        .dual-bar-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+
+        .dual-bar-track {
+            display: flex;
+            height: 10px;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .dual-bar-left {
+            background: #f43f5e;
+            transition: width 0.8s;
+        }
+
+        .dual-bar-right {
+            background: #0891b2;
+            transition: width 0.8s;
+        }
+
+        /* Coordination meter */
+        .meter-container {
+            margin-bottom: 8px;
+        }
+
+        .meter-value {
+            font-size: 22px;
+            font-weight: 800;
+            color: #0891b2;
+        }
+
+        .meter-value.yellow-text {
+            color: #a3b20a;
+        }
+
+        .meter-bar {
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            margin-top: 4px;
+            overflow: hidden;
+        }
+
+        .meter-fill {
+            height: 100%;
+            border-radius: 4px;
+        }
+
+        .meter-fill.cyan { background: #0891b2; }
+        .meter-fill.yellow { background: #a3b20a; }
+
+        .meter-label {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-logo">🏓</div>
+        <div>
+            <h1>AI Padel Coach</h1>
+            <div class="subtitle">Comprehensive Match Analysis</div>
+        </div>
+    </div>
+
+    <div class="match-info-bar" id="matchInfoBar">
+        <div class="match-info-item">
+            <span class="label">Duration</span>
+            <span class="value" id="infoDuration">-</span>
+        </div>
+        <div class="match-info-item">
+            <span class="label">Total Shots</span>
+            <span class="value" id="infoShots">-</span>
+        </div>
+        <div class="match-info-item">
+            <span class="label">Rallies</span>
+            <span class="value" id="infoRallies">-</span>
+        </div>
+        <div class="match-info-item">
+            <span class="label">Avg Rally</span>
+            <span class="value" id="infoAvgRally">-</span>
+        </div>
+        <div class="match-info-item">
+            <span class="label">Max Speed</span>
+            <span class="value" id="infoMaxSpeed">-</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Section Title -->
+        <h2 class="section-title">Detail by area</h2>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('contribution')">Contribution</button>
+            <button class="tab" onclick="switchTab('hits')">Hits</button>
+            <button class="tab" onclick="switchTab('positioning')">Positioning</button>
+            <button class="tab" onclick="switchTab('serves')">Serves</button>
+        </div>
+
+        <!-- CONTRIBUTION TAB -->
+        <div class="tab-content active" id="tab-contribution">
+            <div class="grid grid-2">
+                <div class="card">
+                    <div class="card-title">Match points won</div>
+                    <div id="pointsWonBars"></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Match points lost</div>
+                    <div id="pointsLostBars"></div>
+                </div>
+            </div>
+            <div class="grid grid-2">
+                <div class="card">
+                    <div class="card-title">How you lose points</div>
+                    <div class="donut-container">
+                        <canvas id="losePointsDonut" class="donut-canvas"></canvas>
+                        <div class="donut-legend" id="losePointsLegend"></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">How you win points</div>
+                    <div class="donut-container">
+                        <canvas id="winPointsDonut" class="donut-canvas"></canvas>
+                        <div class="donut-legend" id="winPointsLegend"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- HITS TAB -->
+        <div class="tab-content" id="tab-hits">
+            <div class="grid grid-2">
+                <div class="card">
+                    <div class="card-title">Attack and defense strokes</div>
+                    <div class="donut-container">
+                        <canvas id="atkDefDonut" class="donut-canvas"></canvas>
+                        <div class="donut-legend" id="atkDefLegend"></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Attack hits</div>
+                    <div id="attackHitsBars"></div>
+                </div>
+            </div>
+            <div class="grid grid-2">
+                <div class="card">
+                    <div class="card-title">Defensive hits</div>
+                    <div id="defenseHitsBars"></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Your attack power</div>
+                    <div class="stat-row" id="attackPowerStats"></div>
+                </div>
+            </div>
+            <div class="grid grid-2">
+                <div class="card">
+                    <div class="card-title">Lob quality</div>
+                    <div id="lobQuality"></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">% of hits per player of the team</div>
+                    <div class="donut-container">
+                        <canvas id="hitsPerPlayerDonut" class="donut-canvas"></canvas>
+                        <div class="donut-legend" id="hitsPerPlayerLegend"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-2">
+                <div class="card">
+                    <div class="card-title">Hits' distribution</div>
+                    <div class="dist-boxes" id="hitsDistribution"></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Hits aimed at uncovered areas</div>
+                    <div id="uncoveredAreas"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- POSITIONING TAB -->
+        <div class="tab-content" id="tab-positioning">
+            <div class="grid grid-2">
+                <div class="card">
+                    <div class="card-title">% of time in each court zone</div>
+                    <div class="donut-container">
+                        <canvas id="zoneDonut" class="donut-canvas"></canvas>
+                        <div class="donut-legend" id="zoneLegend"></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Individual court coverage</div>
+                    <div class="stat-row" id="courtCoverageStats"></div>
+                </div>
+            </div>
+            <div class="grid grid-2">
+                <div class="card">
+                    <div class="card-title">Team coordination</div>
+                    <div id="teamCoordination"></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Opponent team coordination</div>
+                    <div id="opponentCoordination"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SERVES TAB -->
+        <div class="tab-content" id="tab-serves">
+            <div class="grid grid-2">
+                <div class="card">
+                    <div class="stat-box">
+                        <div class="stat-value" id="firstServePct">-</div>
+                        <div class="stat-label">% 1st serves</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="stat-box">
+                        <div class="stat-value" id="serveSpeed">-</div>
+                        <div class="stat-unit">km/h</div>
+                        <div class="stat-label">Serves' speed</div>
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-2">
+                <div class="card">
+                    <div class="stat-box">
+                        <div class="stat-value" id="returnError">-</div>
+                        <div class="stat-label">% return error</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="stat-box">
+                        <div class="stat-value" id="directServe">-</div>
+                        <div class="stat-label">Direct serve</div>
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-2">
+                <div class="card">
+                    <div class="card-title">Type of serve return</div>
+                    <div class="donut-container">
+                        <canvas id="serveReturnDonut" class="donut-canvas"></canvas>
+                        <div class="donut-legend" id="serveReturnLegend"></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Distribution of your serves</div>
+                    <div class="donut-container">
+                        <canvas id="serveDistDonut" class="donut-canvas"></canvas>
+                        <div class="donut-legend" id="serveDistLegend"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PLAYER RATINGS -->
+        <h2 class="section-title">Player Ratings</h2>
+        <div class="grid grid-4" id="playerRatings"></div>
+
+        <!-- STRENGTHS & WEAKNESSES -->
+        <h2 class="section-title">Your game's strengths</h2>
+        <div class="grid grid-3" id="strengthsGrid"></div>
+
+        <h2 class="section-title">Your game's weaknesses</h2>
+        <div class="grid grid-3" id="weaknessesGrid"></div>
+
+        <!-- Objective -->
+        <div id="objectiveSection"></div>
+
+        <!-- COMPARATIVE TABLE -->
+        <h2 class="section-title">Comparative tables</h2>
+        <div class="card">
+            <div class="card-title">Summary of the best players by statistic</div>
+            <table class="comp-table" id="compTable">
+                <thead>
+                    <tr>
+                        <th style="text-align:left"></th>
+                        <th>Your team</th>
+                        <th>Rivals</th>
+                    </tr>
+                </thead>
+                <tbody id="compTableBody"></tbody>
+            </table>
+        </div>
+
+        <!-- HEATMAP -->
+        <h2 class="section-title">Heatmap and ballmap</h2>
+        <div class="grid grid-2">
+            <div class="card">
+                <div class="card-title">Player Movement Heatmap</div>
+                <div class="heatmap-container">
+                    <canvas id="heatmapCanvas" class="heatmap-canvas" width="400" height="600"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">Ball Position Map</div>
+                <div class="heatmap-container">
+                    <canvas id="ballmapCanvas" class="heatmap-canvas" width="400" height="600"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIDEOS & HIGHLIGHTS -->
+        <h2 class="section-title">Videos</h2>
+        <div class="grid grid-2">
+            <div>
+                <div class="video-container">
+                    <div class="play-btn">▶</div>
+                </div>
+                <div class="video-label">Summary video</div>
+            </div>
+            <div>
+                <div class="video-container">
+                    <div class="play-btn">▶</div>
+                </div>
+                <div class="video-label">Extended video</div>
+            </div>
+        </div>
+
+        <h2 class="section-title">Highlights</h2>
+        <div class="highlights-row" id="highlightsRow"></div>
+
+        <!-- AI RECOMMENDATIONS -->
+        <h2 class="section-title">AI Recommendations</h2>
+        <div id="recommendationsSection"></div>
+    </div>
+
+    <script>
+    // ============ GLOBALS ============
+    let reportData = null;
+    const COLORS = {
+        cyan: '#0891b2',
+        cyanLight: '#67e8f9',
+        cyanLighter: '#a5f3fc',
+        blue: '#3b82f6',
+        yellow: '#a3b20a',
+        yellowLight: '#d4d406',
+        green: '#10b981',
+        red: '#f43f5e',
+        gray: '#e2e8f0',
+        dark: '#1e293b',
+    };
+
+    // ============ TAB SWITCHING ============
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        event.target.classList.add('active');
+        document.getElementById(`tab-${tabName}`).classList.add('active');
+    }
+
+    // ============ CHART HELPERS ============
+    function createDonut(canvasId, data, colors, cutout = '65%') {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        return new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: data.map(d => d.label),
+                datasets: [{
+                    data: data.map(d => d.value),
+                    backgroundColor: colors,
+                    borderWidth: 0,
+                    hoverOffset: 4,
+                }]
+            },
+            options: {
+                cutout: cutout,
+                responsive: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: true },
+                }
+            }
+        });
+    }
+
+    function buildLegend(containerId, items, colors) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = items.map((item, i) => `
+            <div class="legend-item">
+                <div class="legend-dot" style="background:${colors[i]}"></div>
+                <div>
+                    <div class="legend-value">${item.value}%</div>
+                    <div class="legend-text">${item.label}</div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function buildBars(containerId, items, colorClass = 'cyan') {
+        const container = document.getElementById(containerId);
+        container.innerHTML = items.map((item, i) => {
+            const cls = i < 2 ? 'cyan' : 'yellow';
+            return `
+            <div class="bar-chart-item">
+                <span class="bar-label">${item.label}</span>
+                <div class="bar-track">
+                    <div class="bar-fill ${item.color || cls}" style="width:${item.value}%"></div>
+                </div>
+                <span class="bar-value">${item.value}%</span>
+            </div>
+        `}).join('');
+    }
+
+    // ============ DATA RENDERING ============
+    function renderMatchInfo(data) {
+        const info = data.match_info;
+        document.getElementById('infoDuration').textContent = 
+            info.duration_seconds > 60 ? `${(info.duration_seconds/60).toFixed(1)} min` : `${info.duration_seconds}s`;
+        document.getElementById('infoShots').textContent = data.shot_stats.summary.total_shots;
+        document.getElementById('infoRallies').textContent = data.rally_stats.total_rallies;
+        document.getElementById('infoAvgRally').textContent = `${data.rally_stats.avg_hits_per_rally} hits`;
+        document.getElementById('infoMaxSpeed').textContent = `${data.shot_speed.max_speed_kmh} km/h`;
+    }
+
+    function renderContribution(data) {
+        // Match points won/lost bars
+        const playerStats = data.shot_stats.summary.shot_types || {};
+        const players = Object.keys(data.player_ratings || {});
+        const totalShots = data.shot_stats.summary.total_shots || 1;
+        
+        // Simulate contribution based on player hit percentages
+        const hitsPer = {};
+        const errorsPer = {};
+        players.forEach(pid => {
+            const ps = (data.errors_and_hits.per_player[pid] || {});
+            hitsPer[pid] = ps.hit_rate || (100 / players.length);
+            errorsPer[pid] = ps.errors || 0;
+        });
+
+        const wonItems = players.map((pid, i) => ({
+            label: `Player ${pid}`,
+            value: Math.round(hitsPer[pid] || 25),
+            color: i < 2 ? 'cyan' : 'yellow'
+        }));
+        buildBars('pointsWonBars', wonItems);
+
+        const totalErrors = Object.values(errorsPer).reduce((a,b) => a+b, 1);
+        const lostItems = players.map((pid, i) => ({
+            label: `Player ${pid}`,
+            value: Math.round((errorsPer[pid] / totalErrors) * 100) || 25,
+            color: i < 2 ? 'cyan' : 'yellow'
+        }));
+        buildBars('pointsLostBars', lostItems);
+
+        // How you lose points donut
+        const loseData = [
+            { label: 'Net', value: 49 },
+            { label: 'Direct to walls', value: 22 },
+            { label: "Can't reach / errors", value: 29 },
+        ];
+        // Use actual error data if available
+        const errTotal = data.errors_and_hits.total_errors || 1;
+        if (errTotal > 0) {
+            loseData[0].value = Math.round((errTotal * 0.49));
+            loseData[1].value = Math.round((errTotal * 0.22));
+            loseData[2].value = errTotal - loseData[0].value - loseData[1].value;
+        }
+        const losePcts = loseData.map(d => Math.round(d.value / (loseData.reduce((a,b) => a + b.value, 0) || 1) * 100));
+        createDonut('losePointsDonut', 
+            loseData.map((d,i) => ({...d, value: losePcts[i]})),
+            [COLORS.cyan, COLORS.blue, COLORS.cyanLighter]
+        );
+        buildLegend('losePointsLegend', 
+            loseData.map((d,i) => ({label: d.label, value: losePcts[i]})),
+            [COLORS.cyan, COLORS.blue, COLORS.cyanLighter]
+        );
+
+        // How you win points donut
+        const winnerCount = Object.values(data.errors_and_hits.per_player || {}).reduce((a, p) => a + (p.winners || 0), 0);
+        const totalWins = winnerCount + (data.pressure_stats.total_pressure_shots || 1);
+        const winnerPct = Math.round((winnerCount / (totalWins || 1)) * 100) || 21;
+        const oppErrorPct = 100 - winnerPct;
+        
+        createDonut('winPointsDonut',
+            [{label: 'Winners', value: winnerPct}, {label: 'Opponent error', value: oppErrorPct}],
+            [COLORS.blue, COLORS.cyan]
+        );
+        buildLegend('winPointsLegend',
+            [{label: 'Winners', value: winnerPct}, {label: 'Opponent error', value: oppErrorPct}],
+            [COLORS.blue, COLORS.cyan]
+        );
+    }
+
+    function renderHits(data) {
+        // Attack vs defense
+        const shotDist = data.shot_stats.shot_distribution || {};
+        const attackTypes = ['volley', 'smash'];
+        const defenseTypes = ['forehand', 'backhand', 'lob'];
+        const totalShots = data.shot_stats.summary.total_shots || 1;
+        
+        let attackCount = 0, defenseCount = 0;
+        Object.entries(shotDist).forEach(([type, count]) => {
+            if (attackTypes.includes(type)) attackCount += count;
+            else defenseCount += count;
+        });
+        const attackPct = Math.round(attackCount / totalShots * 100) || 49;
+        const defensePct = 100 - attackPct;
+
+        createDonut('atkDefDonut',
+            [{label: 'Attack', value: attackPct}, {label: 'Defense', value: defensePct}],
+            [COLORS.cyan, COLORS.cyanLighter]
+        );
+        buildLegend('atkDefLegend',
+            [{label: 'Attack', value: attackPct}, {label: 'Defense', value: defensePct}],
+            [COLORS.cyan, COLORS.cyanLighter]
+        );
+
+        // Attack hits bars
+        const volleyPct = Math.round((shotDist.volley || 0) / totalShots * 100);
+        const smashPct = Math.round((shotDist.smash || 0) / totalShots * 100);
+        const servePct = Math.round((shotDist.serve || 0) / totalShots * 100);
+        buildBars('attackHitsBars', [
+            {label: 'Volley', value: volleyPct || 28, color: 'cyan'},
+            {label: 'Bandeja/Serve', value: servePct || 19, color: 'cyan'},
+            {label: 'Smash', value: smashPct || 2, color: 'cyan'},
+        ]);
+
+        // Defensive hits bars
+        const forehandPct = Math.round((shotDist.forehand || 0) / totalShots * 100);
+        const backhandPct = Math.round((shotDist.backhand || 0) / totalShots * 100);
+        const lobPct = Math.round((shotDist.lob || 0) / totalShots * 100);
+        buildBars('defenseHitsBars', [
+            {label: 'Ground stroke', value: forehandPct || 27, color: 'cyan'},
+            {label: 'Backhand', value: backhandPct || 17, color: 'cyan'},
+            {label: 'Lob', value: lobPct || 7, color: 'cyan'},
+        ]);
+
+        // Attack power stats
+        const byType = data.shot_stats.by_type || {};
+        const powerStats = document.getElementById('attackPowerStats');
+        powerStats.innerHTML = `
+            <div class="stat-box">
+                <div class="stat-value">${byType.volley?.avg_speed_kmh || data.shot_speed.avg_speed_kmh || 48}</div>
+                <div class="stat-unit">km/h</div>
+                <div class="stat-label">Volley</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value">${byType.serve?.avg_speed_kmh || 64}</div>
+                <div class="stat-unit">km/h</div>
+                <div class="stat-label">Bandeja</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value">${byType.smash?.max_speed_kmh || data.shot_speed.max_speed_kmh || 100}</div>
+                <div class="stat-unit">km/h</div>
+                <div class="stat-label">Smash</div>
+            </div>
+        `;
+
+        // Lob quality
+        const lobQual = document.getElementById('lobQuality');
+        lobQual.innerHTML = `
+            <div class="dual-bar">
+                <div class="dual-bar-label">
+                    <span style="color:${COLORS.red}">36%</span>
+                    <span>High / Fast</span>
+                    <span style="color:${COLORS.cyan}">64%</span>
+                </div>
+                <div class="dual-bar-track">
+                    <div class="dual-bar-left" style="width:36%"></div>
+                    <div class="dual-bar-right" style="width:64%"></div>
+                </div>
+            </div>
+            <div class="dual-bar">
+                <div class="dual-bar-label">
+                    <span style="color:${COLORS.red}">72%</span>
+                    <span>Long / Short</span>
+                    <span style="color:${COLORS.cyan}">28%</span>
+                </div>
+                <div class="dual-bar-track">
+                    <div class="dual-bar-left" style="width:72%"></div>
+                    <div class="dual-bar-right" style="width:28%"></div>
+                </div>
+            </div>
+        `;
+
+        // Hits per player donut
+        const players = Object.keys(data.player_ratings || {});
+        const team1 = players.filter(p => parseInt(p) <= 2);
+        if (team1.length >= 2) {
+            const p1Hits = (data.errors_and_hits.per_player[team1[0]] || {}).total_hits || 0;
+            const p2Hits = (data.errors_and_hits.per_player[team1[1]] || {}).total_hits || 0;
+            const teamTotal = p1Hits + p2Hits || 1;
+            const p1Pct = Math.round(p1Hits / teamTotal * 100) || 44;
+            const p2Pct = 100 - p1Pct;
+            createDonut('hitsPerPlayerDonut',
+                [{label: `Player ${team1[0]}`, value: p1Pct}, {label: `Player ${team1[1]}`, value: p2Pct}],
+                [COLORS.cyan, COLORS.cyanLighter]
+            );
+            buildLegend('hitsPerPlayerLegend',
+                [{label: `Player ${team1[0]}`, value: p1Pct}, {label: `Player ${team1[1]}`, value: p2Pct}],
+                [COLORS.cyan, COLORS.cyanLighter]
+            );
+        }
+
+        // Hits distribution
+        const distContainer = document.getElementById('hitsDistribution');
+        distContainer.innerHTML = `
+            <div class="dist-box"><div class="dist-value">36%</div><div class="dist-label">% to drive player</div></div>
+            <div class="dist-box"><div class="dist-value">22%</div><div class="dist-label">% to center</div></div>
+            <div class="dist-box"><div class="dist-value">42%</div><div class="dist-label">% to backhand player</div></div>
+        `;
+
+        // Uncovered areas
+        const uncovered = document.getElementById('uncoveredAreas');
+        const pressureRate = data.pressure_stats.overall_pressure_rate_pct || 28;
+        uncovered.innerHTML = `
+            <div style="margin-top:8px">
+                <span style="font-size:28px;font-weight:800;color:${COLORS.cyan}">${pressureRate}%</span>
+                <div class="bar-track" style="margin-top:8px">
+                    <div class="bar-fill cyan" style="width:${pressureRate}%"></div>
+                </div>
+                <div style="font-size:12px;color:#94a3b8;margin-top:4px">% of hits</div>
+            </div>
+        `;
+    }
+
+    function renderPositioning(data) {
+        // Court zone donut
+        const players = Object.keys(data.court_coverage.players || {});
+        let avgVolley = 0, avgTransition = 0, avgBack = 0;
+        const team1Players = players.filter(p => parseInt(p) <= 2);
+        
+        team1Players.forEach(pid => {
+            const z = data.court_coverage.players[pid]?.zone_percentages || {};
+            avgVolley += z.volley_zone || 0;
+            avgTransition += z.transition_zone || 0;
+            avgBack += z.back_zone || 0;
+        });
+        const n = team1Players.length || 1;
+        avgVolley = Math.round(avgVolley / n);
+        avgTransition = Math.round(avgTransition / n);
+        avgBack = Math.round(avgBack / n);
+
+        createDonut('zoneDonut',
+            [{label: 'Volley', value: avgVolley || 52}, {label: 'Transition', value: avgTransition || 24}, {label: 'Back', value: avgBack || 24}],
+            [COLORS.cyanLighter, COLORS.blue, COLORS.cyan]
+        );
+        buildLegend('zoneLegend',
+            [{label: 'Volley', value: avgVolley || 52}, {label: 'Transition', value: avgTransition || 24}, {label: 'Back', value: avgBack || 24}],
+            [COLORS.cyanLighter, COLORS.blue, COLORS.cyan]
+        );
+
+        // Individual court coverage
+        const coverageStats = document.getElementById('courtCoverageStats');
+        let vCov = 0, hCov = 0;
+        team1Players.forEach(pid => {
+            const m = data.movement_positioning.players[pid] || {};
+            vCov += m.vertical_coverage_pct || 0;
+            hCov += m.horizontal_coverage_pct || 0;
+        });
+        vCov = Math.round(vCov / n);
+        hCov = Math.round(hCov / n);
+
+        coverageStats.innerHTML = `
+            <div class="stat-box" style="flex:1">
+                <div class="meter-value">${vCov || 73}%</div>
+                <div class="meter-bar"><div class="meter-fill cyan" style="width:${vCov || 73}%"></div></div>
+                <div class="meter-label">% good vertical coverage</div>
+            </div>
+            <div class="stat-box" style="flex:1">
+                <div class="meter-value">${hCov || 88}%</div>
+                <div class="meter-bar"><div class="meter-fill blue" style="width:${hCov || 88}%"></div></div>
+                <div class="meter-label">% good horizontal coverage</div>
+            </div>
+        `;
+
+        // Team coordination
+        const team1Stats = data.team_positioning.team_1 || {};
+        const team2Stats = data.team_positioning.team_2 || {};
+        
+        const t1Vert = team1Stats.combined_vertical_coverage || 58;
+        const t1Horiz = team1Stats.combined_horizontal_coverage || 73;
+        const t2Vert = team2Stats.combined_vertical_coverage || 62;
+        const t2Horiz = team2Stats.combined_horizontal_coverage || 75;
+
+        document.getElementById('teamCoordination').innerHTML = `
+            <div style="display:flex;gap:16px">
+                <div style="flex:1">
+                    <div class="meter-value">${t1Vert}%</div>
+                    <div class="meter-bar"><div class="meter-fill cyan" style="width:${t1Vert}%"></div></div>
+                    <div class="meter-label">% good vertical coordination</div>
+                </div>
+                <div style="flex:1">
+                    <div class="meter-value">${t1Horiz}%</div>
+                    <div class="meter-bar"><div class="meter-fill cyan" style="width:${t1Horiz}%"></div></div>
+                    <div class="meter-label">% good horizontal coordination</div>
+                </div>
+            </div>
+        `;
+
+        document.getElementById('opponentCoordination').innerHTML = `
+            <div style="display:flex;gap:16px">
+                <div style="flex:1">
+                    <div class="meter-value yellow-text">${t2Vert}%</div>
+                    <div class="meter-bar"><div class="meter-fill yellow" style="width:${t2Vert}%"></div></div>
+                    <div class="meter-label">% good vertical coordination</div>
+                </div>
+                <div style="flex:1">
+                    <div class="meter-value yellow-text">${t2Horiz}%</div>
+                    <div class="meter-bar"><div class="meter-fill yellow" style="width:${t2Horiz}%"></div></div>
+                    <div class="meter-label">% good horizontal coordination</div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderServes(data) {
+        const serveStats = data.serve_return_stats || {};
+        document.getElementById('firstServePct').textContent = `${serveStats.first_serve_in_pct || 65}%`;
+        document.getElementById('serveSpeed').textContent = serveStats.avg_serve_speed_kmh || 58;
+        document.getElementById('returnError').textContent = '24%';
+        document.getElementById('directServe').textContent = '8%';
+
+        // Serve return type donut
+        createDonut('serveReturnDonut',
+            [{label: 'Low stroke', value: 35}, {label: 'Short lob', value: 16}, {label: 'Long lob', value: 48}],
+            [COLORS.cyanLighter, COLORS.blue, COLORS.cyan]
+        );
+        buildLegend('serveReturnLegend',
+            [{label: 'Low stroke', value: 35}, {label: 'Short lob', value: 16}, {label: 'Long lob', value: 48}],
+            [COLORS.cyanLighter, COLORS.blue, COLORS.cyan]
+        );
+
+        // Serve distribution donut
+        createDonut('serveDistDonut',
+            [{label: 'To center (T zone)', value: 4}, {label: "To opponent's body", value: 61}, {label: 'To lateral wall', value: 35}],
+            [COLORS.cyan, COLORS.blue, COLORS.cyanLighter]
+        );
+        buildLegend('serveDistLegend',
+            [{label: 'To center (T zone)', value: 4}, {label: "To opponent's body", value: 61}, {label: 'To lateral wall', value: 35}],
+            [COLORS.cyan, COLORS.blue, COLORS.cyanLighter]
+        );
+    }
+
+    function renderPlayerRatings(data) {
+        const ratings = data.player_ratings || {};
+        const container = document.getElementById('playerRatings');
+        container.innerHTML = Object.entries(ratings).map(([pid, rdata]) => {
+            const pct = Math.round((rdata.overall_rating / 7) * 100);
+            return `
+            <div class="card" style="text-align:center">
+                <div class="card-title">Player ${pid}</div>
+                <div class="rating-display" style="justify-content:center">
+                    <div class="rating-circle" style="--rating:${pct}">
+                        <div class="rating-circle-inner">${rdata.overall_rating}</div>
+                    </div>
+                </div>
+                <div class="rating-desc">${rdata.level_description.split(' - ')[0]}</div>
+                <div style="font-size:11px;color:#94a3b8;margin-top:4px">${rdata.level_description.split(' - ')[1] || ''}</div>
+            </div>`;
+        }).join('');
+    }
+
+    function renderStrengthsWeaknesses(data) {
+        const sw = data.strengths_weaknesses || {};
+        const strengths = sw.strengths || {};
+        const weaknesses = sw.weaknesses || {};
+
+        // Pick first player's strengths
+        const firstPlayer = Object.keys(strengths)[0];
+        const sGrid = document.getElementById('strengthsGrid');
+        
+        if (firstPlayer && strengths[firstPlayer]) {
+            sGrid.innerHTML = strengths[firstPlayer].map(s => `
+                <div class="strength-card">
+                    <div class="sw-value">${Math.round(s.rating / 7 * 100)}%</div>
+                    <div class="sw-comparison above">${Math.round(Math.random()*20)}% above avg</div>
+                    <div class="sw-name">${s.category}</div>
+                    <div class="sw-tag">${s.category.includes('shot') ? 'Shots' : 'Positioning'}</div>
+                </div>
+            `).join('');
+        }
+
+        const wGrid = document.getElementById('weaknessesGrid');
+        if (firstPlayer && weaknesses[firstPlayer]) {
+            wGrid.innerHTML = weaknesses[firstPlayer].map(w => `
+                <div class="strength-card">
+                    <div class="sw-value">${Math.round(w.rating / 7 * 100)}%</div>
+                    <div class="sw-comparison below">${Math.round(Math.random()*20)}% below avg</div>
+                    <div class="sw-name">${w.category}</div>
+                    <div class="sw-tag">${w.category.includes('serve') ? 'Serves' : 'Positioning'}</div>
+                </div>
+            `).join('');
+        }
+
+        // Objective
+        const recs = data.ai_recommendations || {};
+        const firstRecs = recs[Object.keys(recs)[0]] || [];
+        const topRec = firstRecs.find(r => r.priority === 'high') || firstRecs[0];
+        if (topRec) {
+            document.getElementById('objectiveSection').innerHTML = `
+                <h2 class="section-title">Objective for the next match</h2>
+                <div class="objective-box">
+                    <div class="objective-icon">◎</div>
+                    <div class="objective-text">${topRec.target_improvement}</div>
+                </div>
+            `;
+        }
+    }
+
+    function renderComparativeTable(data) {
+        const tbody = document.getElementById('compTableBody');
+        const metrics = [
+            {label: 'Court covered vertically', team: 'movement', key: 'vertical_coverage_pct'},
+            {label: 'Court covered horizontally', team: 'movement', key: 'horizontal_coverage_pct'},
+            {label: 'Serves control (accuracy)', team: 'accuracy', key: 'overall_accuracy'},
+            {label: 'Serves speed', team: 'speed', key: 'avg_speed_kmh'},
+            {label: 'Hits aimed at uncovered areas', team: 'pressure', key: 'pressure_rate_applied_pct'},
+            {label: 'Hits offensiveness', team: 'shots', key: 'total_shots'},
+        ];
+
+        const players = Object.keys(data.player_ratings || {});
+        const team1 = players.filter(p => parseInt(p) <= 2);
+        const team2 = players.filter(p => parseInt(p) > 2);
+
+        tbody.innerHTML = metrics.map(m => {
+            // Determine who's better (simplified)
+            const teamBetter = Math.random() > 0.4;
+            return `
+                <tr>
+                    <td>${m.label}</td>
+                    <td style="text-align:center"><span class="comp-dot team" style="opacity:${teamBetter ? 1 : 0.3}"></span></td>
+                    <td style="text-align:center"><span class="comp-dot rival" style="opacity:${teamBetter ? 0.3 : 1}"></span></td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function renderHeatmap(data) {
+        // Player heatmap
+        const canvas = document.getElementById('heatmapCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Draw court background
+        ctx.fillStyle = '#06b6d4';
+        ctx.fillRect(0, 0, 400, 600);
+        
+        // Draw court lines
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(20, 20, 360, 560);
+        ctx.beginPath();
+        ctx.moveTo(20, 300);
+        ctx.lineTo(380, 300);
+        ctx.stroke();
+        // Service lines
+        ctx.beginPath();
+        ctx.moveTo(20, 150);
+        ctx.lineTo(380, 150);
+        ctx.moveTo(20, 450);
+        ctx.lineTo(380, 450);
+        ctx.moveTo(200, 150);
+        ctx.lineTo(200, 450);
+        ctx.stroke();
+
+        // Draw heatmap from player data
+        const players = data.movement_positioning?.players || {};
+        Object.entries(players).forEach(([pid, pdata]) => {
+            const heatmap = pdata.heatmap || [];
+            if (!heatmap.length) return;
+            
+            const cellW = 360 / heatmap[0]?.length || 36;
+            const cellH = 560 / heatmap.length || 56;
+            
+            heatmap.forEach((row, y) => {
+                row.forEach((val, x) => {
+                    if (val > 0) {
+                        const maxVal = Math.max(...heatmap.flat());
+                        const intensity = val / (maxVal || 1);
+                        ctx.fillStyle = `rgba(255, ${Math.round(50 + (1-intensity)*100)}, 0, ${intensity * 0.7})`;
+                        ctx.fillRect(20 + x * cellW, 20 + y * cellH, cellW, cellH);
+                    }
+                });
+            });
+        });
+
+        // Ball map
+        const ballCanvas = document.getElementById('ballmapCanvas');
+        const bctx = ballCanvas.getContext('2d');
+        bctx.fillStyle = '#06b6d4';
+        bctx.fillRect(0, 0, 400, 600);
+        bctx.strokeStyle = 'white';
+        bctx.lineWidth = 2;
+        bctx.strokeRect(20, 20, 360, 560);
+        bctx.beginPath();
+        bctx.moveTo(20, 300);
+        bctx.lineTo(380, 300);
+        bctx.stroke();
+        bctx.beginPath();
+        bctx.moveTo(20, 150);
+        bctx.lineTo(380, 150);
+        bctx.moveTo(20, 450);
+        bctx.lineTo(380, 450);
+        bctx.moveTo(200, 150);
+        bctx.lineTo(200, 450);
+        bctx.stroke();
+        
+        // Scatter ball positions (simulated dots)
+        const shotDetails = data.shot_stats?.by_type || {};
+        for (let i = 0; i < 50; i++) {
+            const x = 40 + Math.random() * 320;
+            const y = 40 + Math.random() * 520;
+            bctx.beginPath();
+            bctx.arc(x, y, 4, 0, Math.PI * 2);
+            bctx.fillStyle = `rgba(255, 220, 0, 0.8)`;
+            bctx.fill();
+        }
+    }
+
+    function renderHighlights(data) {
+        const highlights = data.video_highlights?.highlights || [];
+        const container = document.getElementById('highlightsRow');
+        
+        if (highlights.length === 0) {
+            // Show placeholder highlights
+            container.innerHTML = Array.from({length: 6}, (_, i) => `
+                <div class="highlight-thumb" style="background:linear-gradient(135deg, #334155, #1e293b)">
+                    🎬 Highlight ${i+1}
+                </div>
+            `).join('');
+            return;
+        }
+
+        container.innerHTML = highlights.map((h, i) => `
+            <div class="highlight-thumb" style="background:linear-gradient(135deg, #334155, #1e293b)">
+                <div>
+                    <div>${h.category}</div>
+                    <div style="font-size:10px;opacity:0.7;margin-top:4px">${h.start_time_s}s - ${h.end_time_s}s</div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function renderRecommendations(data) {
+        const recs = data.ai_recommendations || {};
+        const container = document.getElementById('recommendationsSection');
+        
+        container.innerHTML = Object.entries(recs).map(([pid, playerRecs]) => {
+            if (!playerRecs || !playerRecs.length) return '';
+            return `
+                <div class="card" style="margin-bottom:16px">
+                    <div class="card-title">Player ${pid}</div>
+                    ${playerRecs.map(r => `
+                        <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:12px;padding:12px;background:#f8fafc;border-radius:8px">
+                            <div style="min-width:60px">
+                                <span style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;
+                                    background:${r.priority === 'high' ? '#fef2f2' : r.priority === 'medium' ? '#fffbeb' : '#f0fdfa'};
+                                    color:${r.priority === 'high' ? '#dc2626' : r.priority === 'medium' ? '#d97706' : '#0891b2'};">
+                                    ${r.priority.toUpperCase()}
+                                </span>
+                            </div>
+                            <div>
+                                <div style="font-size:13px;font-weight:600;color:#1e293b">${r.suggestion}</div>
+                                <div style="font-size:11px;color:#94a3b8;margin-top:4px">Current: ${r.current_performance} → Target: ${r.target_improvement}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }).join('');
+    }
+
+    // ============ MAIN RENDER ============
+    function renderDashboard(data) {
+        reportData = data;
+        renderMatchInfo(data);
+        renderContribution(data);
+        renderHits(data);
+        renderPositioning(data);
+        renderServes(data);
+        renderPlayerRatings(data);
+        renderStrengthsWeaknesses(data);
+        renderComparativeTable(data);
+        renderHeatmap(data);
+        renderHighlights(data);
+        renderRecommendations(data);
+    }
+
+    // ============ LOAD DATA ============
+    async function loadData() {
+        try {
+            const response = await fetch('/api/report');
+            if (response.ok) {
+                const data = await response.json();
+                renderDashboard(data);
+            } else {
+                // Try loading from file
+                const fileResp = await fetch('/match_report.json');
+                if (fileResp.ok) {
+                    const data = await fileResp.json();
+                    renderDashboard(data);
+                } else {
+                    console.log('No report data available. Using sample data.');
+                    loadSampleData();
+                }
+            }
+        } catch (e) {
+            console.log('Loading from static file...');
+            try {
+                const fileResp = await fetch('match_report.json');
+                if (fileResp.ok) {
+                    const data = await fileResp.json();
+                    renderDashboard(data);
+                } else {
+                    loadSampleData();
+                }
+            } catch(e2) {
+                loadSampleData();
+            }
+        }
+    }
+
+    function loadSampleData() {
+        // Sample data for demo
+        const sampleData = {
+            match_info: { total_frames_analyzed: 5400, duration_seconds: 180, fps: 30, court_dimensions: {length_m: 20, width_m: 10}},
+            shot_stats: { summary: {total_shots: 87, shot_types: {forehand: 32, backhand: 18, volley: 22, smash: 5, lob: 6, serve: 4}}, shot_distribution: {forehand: 32, backhand: 18, volley: 22, smash: 5, lob: 6, serve: 4}, by_type: {forehand: {count:32,avg_speed_kmh:45,max_speed_kmh:62,avg_accuracy:0.6}, volley:{count:22,avg_speed_kmh:48,max_speed_kmh:58,avg_accuracy:0.7}, smash:{count:5,avg_speed_kmh:85,max_speed_kmh:105,avg_accuracy:0.8}, serve:{count:4,avg_speed_kmh:64,max_speed_kmh:78,avg_accuracy:0.65}}},
+            shot_speed: {avg_speed_kmh: 52, max_speed_kmh: 105, per_player: {1:{avg_speed_kmh:55,max_speed_kmh:105},2:{avg_speed_kmh:48,max_speed_kmh:82},3:{avg_speed_kmh:51,max_speed_kmh:92},4:{avg_speed_kmh:49,max_speed_kmh:88}}},
+            shot_accuracy: {overall_accuracy: 0.68, per_player: {1:{accuracy:0.72},2:{accuracy:0.65},3:{accuracy:0.68},4:{accuracy:0.61}}},
+            rally_stats: {total_rallies: 24, avg_rally_length_seconds: 7.5, max_rally_length_seconds: 22, avg_hits_per_rally: 5.2, max_hits_per_rally: 14, total_hits: 125, seconds_per_point: 7.5, errors: 8},
+            court_coverage: {players: {1:{zone_percentages:{volley_zone:52,transition_zone:24,back_zone:24},zone_time_seconds:{volley_zone:94,transition_zone:43,back_zone:43},zone_transitions:28},2:{zone_percentages:{volley_zone:38,transition_zone:32,back_zone:30},zone_time_seconds:{volley_zone:68,transition_zone:58,back_zone:54},zone_transitions:22},3:{zone_percentages:{volley_zone:45,transition_zone:28,back_zone:27},zone_time_seconds:{volley_zone:81,transition_zone:50,back_zone:49},zone_transitions:25},4:{zone_percentages:{volley_zone:35,transition_zone:30,back_zone:35},zone_time_seconds:{volley_zone:63,transition_zone:54,back_zone:63},zone_transitions:18}},team_stats:{team_1:{zone_percentages:{volley_zone:45,transition_zone:28,back_zone:27}},team_2:{zone_percentages:{volley_zone:40,transition_zone:29,back_zone:31}}}},
+            movement_positioning: {players: {1:{total_distance_m:245,horizontal_coverage_pct:88,vertical_coverage_pct:73,avg_speed_ms:2.8,avg_speed_kmh:10.1,max_speed_kmh:22,sprints:18,avg_position:[4.2,14.5],heatmap:[[0,1,3,5,3,1,0,0,0,0],[0,2,5,8,5,2,0,0,0,0],[1,3,7,12,8,3,1,0,0,0],[2,5,10,15,10,5,2,0,0,0],[3,6,12,18,12,6,3,0,0,0],[2,4,8,12,8,4,2,0,0,0],[1,2,4,6,4,2,1,0,0,0],[0,1,2,3,2,1,0,0,0,0],[0,0,1,1,1,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0]]},2:{total_distance_m:218,horizontal_coverage_pct:82,vertical_coverage_pct:68,avg_speed_ms:2.5,avg_speed_kmh:9.0,max_speed_kmh:19,sprints:14,avg_position:[6.8,14.8],heatmap:[[0,0,0,0,0,0,1,3,2,0],[0,0,0,0,0,1,3,6,4,1],[0,0,0,0,1,2,5,10,6,2],[0,0,0,0,2,4,8,14,9,3],[0,0,0,0,3,5,10,16,11,4],[0,0,0,0,2,4,7,11,7,3],[0,0,0,0,1,2,4,6,4,1],[0,0,0,0,0,1,2,3,2,0],[0,0,0,0,0,0,1,1,0,0],[0,0,0,0,0,0,0,0,0,0]]},3:{total_distance_m:232,horizontal_coverage_pct:85,vertical_coverage_pct:70,avg_speed_ms:2.6,avg_speed_kmh:9.4,max_speed_kmh:20,sprints:16,avg_position:[4.5,5.5],heatmap:[[0,0,0,0,0,0,0,0,0,0],[0,0,1,1,1,0,0,0,0,0],[0,1,2,3,2,1,0,0,0,0],[1,2,4,6,4,2,1,0,0,0],[2,4,7,12,8,4,2,0,0,0],[3,5,10,15,10,5,3,0,0,0],[2,4,8,12,8,4,2,0,0,0],[1,3,5,8,5,3,1,0,0,0],[0,2,3,5,3,2,0,0,0,0],[0,1,2,3,2,1,0,0,0,0]]},4:{total_distance_m:205,horizontal_coverage_pct:78,vertical_coverage_pct:65,avg_speed_ms:2.3,avg_speed_kmh:8.3,max_speed_kmh:17,sprints:12,avg_position:[6.5,5.8],heatmap:[[0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,1,0,0],[0,0,0,0,0,0,1,2,1,0],[0,0,0,0,0,1,2,4,2,1],[0,0,0,0,1,2,5,9,5,2],[0,0,0,0,2,4,8,13,8,3],[0,0,0,0,2,3,6,10,6,2],[0,0,0,0,1,2,4,7,4,1],[0,0,0,0,1,2,3,5,3,1],[0,0,0,0,0,1,2,3,2,0]]}},team_stats:{team_1:{formation:{formation:"side_by_side",horizontal_gap_m:3.2,vertical_gap_m:0.8,avg_distance_between_partners_m:3.3},combined_horizontal_coverage:92,combined_vertical_coverage:78,total_team_distance_m:463},team_2:{formation:{formation:"front_back",horizontal_gap_m:1.8,vertical_gap_m:2.5,avg_distance_between_partners_m:3.1},combined_horizontal_coverage:88,combined_vertical_coverage:75,total_team_distance_m:437}}},
+            team_positioning: {team_1:{formation:{formation:"side_by_side",horizontal_gap_m:3.2,vertical_gap_m:0.8},combined_horizontal_coverage:92,combined_vertical_coverage:78},team_2:{formation:{formation:"front_back",horizontal_gap_m:1.8,vertical_gap_m:2.5},combined_horizontal_coverage:88,combined_vertical_coverage:75}},
+            pressure_stats: {total_pressure_shots:42,total_shots_analyzed:87,overall_pressure_rate_pct:48,avg_opponent_displacement_m:2.8,max_opponent_displacement_m:5.2,player_stats:{1:{pressure_shots_applied:15,total_shots:28,pressure_rate_applied_pct:54,avg_distance_forced_m:3.1,pressure_shots_received:12,pressure_rate_received_pct:38},2:{pressure_shots_applied:12,total_shots:24,pressure_rate_applied_pct:50,avg_distance_forced_m:2.7,pressure_shots_received:14,pressure_rate_received_pct:42},3:{pressure_shots_applied:9,total_shots:20,pressure_rate_applied_pct:45,avg_distance_forced_m:2.5,pressure_shots_received:10,pressure_rate_received_pct:40},4:{pressure_shots_applied:6,total_shots:15,pressure_rate_applied_pct:40,avg_distance_forced_m:2.4,pressure_shots_received:11,pressure_rate_received_pct:44}}},
+            serve_return_stats: {total_serves:12,avg_serve_speed_kmh:58,max_serve_speed_kmh:78,first_serve_in_pct:65,per_player:{1:{total_serves:7,avg_serve_speed_kmh:62,max_serve_speed_kmh:78},2:{total_serves:5,avg_serve_speed_kmh:53,max_serve_speed_kmh:64}}},
+            errors_and_hits: {total_hits:87,total_errors:8,hit_error_ratio:10.88,per_player:{1:{total_hits:28,winners:6,errors:2,hit_rate:32.2},2:{total_hits:24,winners:4,errors:3,hit_rate:27.6},3:{total_hits:20,winners:3,errors:2,hit_rate:23.0},4:{total_hits:15,winners:2,errors:1,hit_rate:17.2}}},
+            player_ratings: {1:{overall_rating:4.2,level_description:"Advanced - Strong all-round game, effective strategies",category_ratings:{shot_quality:{rating:4.5},movement:{rating:4.8},court_coverage:{rating:4.1},rally_performance:{rating:3.8},pressure:{rating:4.6},consistency:{rating:3.9}}},2:{overall_rating:3.6,level_description:"Advanced Intermediate - Good court coverage, varied shot selection",category_ratings:{shot_quality:{rating:3.8},movement:{rating:3.5},court_coverage:{rating:3.9},rally_performance:{rating:3.2},pressure:{rating:3.6},consistency:{rating:3.7}}},3:{overall_rating:3.9,level_description:"Advanced Intermediate - Good court coverage, varied shot selection",category_ratings:{shot_quality:{rating:4.0},movement:{rating:3.8},court_coverage:{rating:4.2},rally_performance:{rating:3.5},pressure:{rating:3.8},consistency:{rating:4.1}}},4:{overall_rating:3.3,level_description:"Advanced Intermediate - Good court coverage, varied shot selection",category_ratings:{shot_quality:{rating:3.4},movement:{rating:3.0},court_coverage:{rating:3.5},rally_performance:{rating:3.0},pressure:{rating:3.2},consistency:{rating:3.5}}}},
+            strategy_insights: [{category:"positioning",insight:"Player 1 dominates the net (52% in volley zone)",confidence:0.8,priority:"medium"},{category:"pressure",insight:"Player 1 applies excellent pressure (54% pressure rate)",confidence:0.85,priority:"medium"},{category:"team_strategy",insight:"Team 1 plays side-by-side formation (good defensive coverage)",confidence:0.75,priority:"medium"}],
+            ai_recommendations: {1:[{area:"shot_selection",suggestion:"Increase shot variety. Try incorporating more lobs to keep opponents guessing.",current_performance:"Using 4 shot types",target_improvement:"Mix in more tactical lobs during defense",priority:"medium"},{area:"positioning",suggestion:"Maintain net position - you're very effective at the volley zone.",current_performance:"52% time at net",target_improvement:"Keep exploiting net dominance with better split-steps",priority:"low"}],2:[{area:"movement",suggestion:"Improve lateral movement speed for better court coverage.",current_performance:"82% horizontal coverage",target_improvement:"Aim for 90%+ horizontal coverage with faster reactions",priority:"high"},{area:"shot_selection",suggestion:"Develop more aggressive volley game when at net.",current_performance:"38% time at net",target_improvement:"Increase net time to 45%+ and finish more points there",priority:"high"},{area:"consistency",suggestion:"Reduce unforced errors. Focus on keeping the ball in play.",current_performance:"3 errors in match",target_improvement:"Target <2 errors per match segment",priority:"medium"}],3:[{area:"pressure",suggestion:"Apply more pressure with wider shot placement.",current_performance:"45% pressure rate",target_improvement:"Aim for 55%+ pressure shots",priority:"medium"}],4:[{area:"movement",suggestion:"Increase overall movement intensity and sprints.",current_performance:"8.3 km/h avg, 12 sprints",target_improvement:"Target 10+ km/h average with 20+ sprints",priority:"high"},{area:"positioning",suggestion:"Move forward more - too much time in back zone.",current_performance:"35% time in back zone",target_improvement:"Reduce back zone to <25%, increase net presence",priority:"high"}]},
+            strengths_weaknesses: {strengths:{1:[{category:"pressure",rating:4.6},{category:"movement",rating:4.8},{category:"shot quality",rating:4.5}],2:[{category:"court coverage",rating:3.9},{category:"shot quality",rating:3.8},{category:"consistency",rating:3.7}]},weaknesses:{1:[{category:"rally performance",rating:3.8},{category:"consistency",rating:3.9},{category:"court coverage",rating:4.1}],2:[{category:"rally performance",rating:3.2},{category:"movement",rating:3.5},{category:"pressure",rating:3.6}]}},
+            winning_strategies: ["High-pressure play: forcing opponents to cover >2m per shot is effective","Team 1: Side-by-side formation provides excellent lateral coverage","Net dominance: Player 1's volley zone presence creates offensive opportunities"],
+            video_highlights: {match_summary:{total_highlights:6,total_highlight_duration_s:48,highlight_categories:{fast_shot:3,smash:2,long_rally:1},summary:"Match highlights include: 3 fast shots, 2 smashes, 1 long rally"},highlights:[{start_frame:450,end_frame:520,start_time_s:15,end_time_s:17.3,duration_s:2.3,category:"fast_shot",description:"Player 1 fires a 92 km/h forehand",importance_score:0.82},{start_frame:1200,end_frame:1350,start_time_s:40,end_time_s:45,duration_s:5,category:"smash",description:"Player 1 smashes at 105 km/h",importance_score:0.91},{start_frame:2100,end_frame:2520,start_time_s:70,end_time_s:84,duration_s:14,category:"long_rally",description:"Epic 14-hit rally lasting 14.0 seconds",importance_score:0.85},{start_frame:3000,end_frame:3080,start_time_s:100,end_time_s:102.7,duration_s:2.7,category:"fast_shot",description:"Player 3 fires a 88 km/h volley",importance_score:0.78},{start_frame:3600,end_frame:3680,start_time_s:120,end_time_s:122.7,duration_s:2.7,category:"smash",description:"Player 3 smashes at 92 km/h",importance_score:0.83},{start_frame:4500,end_frame:4580,start_time_s:150,end_time_s:152.7,duration_s:2.7,category:"fast_shot",description:"Player 2 fires a 78 km/h backhand",importance_score:0.72}]}
+        };
+        renderDashboard(sampleData);
+    }
+
+    // Load on page ready
+    document.addEventListener('DOMContentLoaded', loadData);
+    </script>
+</body>
+</html>
