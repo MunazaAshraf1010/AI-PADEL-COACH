@@ -8,7 +8,6 @@ venv/
 weights/**/*.pt
 
 # Videos & media
-*.mp4
 *.avi
 *.png
 *.jpg
