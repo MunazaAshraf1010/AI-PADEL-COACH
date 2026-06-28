@@ -5,7 +5,7 @@ venv/
 .env
 
 # Model weights (download separately)
-weights/**/*.pt
+
 
 # Videos & media
 *.avi
