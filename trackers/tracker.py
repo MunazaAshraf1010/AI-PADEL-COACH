@@ -126,7 +126,7 @@ class Tracker(ABC):
             print(f"{self.__str__()}: {self.__len__()} predictions saved")
     
     def load_predictions(self) -> None:
-        if self.load_path:
+        if self.load_path and Path(self.load_path).exists():
 
             print(f"{self.__str__()}: loading predictions")
 

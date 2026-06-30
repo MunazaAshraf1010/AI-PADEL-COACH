@@ -268,23 +268,30 @@ class HighlightGenerator:
         return exported_files
 
     def get_match_summary(self) -> dict:
-        """Generate a match summary from highlights"""
+        """Generate a match summary from the de-duplicated highlight moments.
+
+        Uses the same merged set that get_highlights() returns so the summary
+        counts match the highlights actually listed (overlapping fast-shot
+        windows within a single rally collapse into one moment).
+        """
         if not self.highlights:
             return {"summary": "No notable moments detected", "total_highlights": 0}
 
+        merged = self._merge_overlapping(self.highlights)
+
         categories = {}
-        for h in self.highlights:
+        for h in merged:
             categories[h.category] = categories.get(h.category, 0) + 1
 
-        total_highlight_time = sum(
-            h.duration_seconds(self.fps) for h in self.highlights
-        )
+        total_highlight_time = sum(h.duration_seconds(self.fps) for h in merged)
+
+        top_moment = max(merged, key=lambda h: h.importance_score)
 
         return {
-            "total_highlights": len(self.highlights),
+            "total_highlights": len(merged),
             "total_highlight_duration_s": round(total_highlight_time, 1),
             "highlight_categories": categories,
-            "top_moment": self.highlights[0].serialize(self.fps) if self.highlights else None,
+            "top_moment": top_moment.serialize(self.fps),
             "summary": self._generate_text_summary(categories),
         }
 

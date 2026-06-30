@@ -137,24 +137,45 @@ class BallTrajectoryIterable(IterableDataset):
     def median_image(self) -> Image:
         return Image.fromarray(np.moveaxis(self.median, 0, -1))
 
+    def _resize_chw(self, frame_rgb: np.ndarray) -> np.ndarray:
+        # Resize one RGB frame to (3, H, W) with PIL bicubic — identical to the
+        # original concat-path resize, but done ONCE per frame instead of seq_len
+        # times per sliding window.
+        img = np.array(Image.fromarray(frame_rgb).resize(size=(self.WIDTH, self.HEIGHT)))
+        return np.moveaxis(img, -1, 0)
+
     def generator_chuncks(
-        self, 
+        self,
         generator: Iterable[np.ndarray],
         sequence_length: int,
     ) -> Iterable[np.array]:
+        # For non-subtract modes, resize each frame exactly once here and slide the
+        # window over already-resized frames. Previously every frame was resized
+        # seq_len times (once per window it appeared in) — the dominant cost.
+        preresize = self.bg_mode in ('', 'concat')
         w = []
         for x in generator:
             x = cv2.cvtColor(x, cv2.COLOR_BGR2RGB)
-            w.append(x)
+            w.append(self._resize_chw(x) if preresize else x)
 
             if len(w) == sequence_length:
-                yield np.array(w)
+                yield list(w) if preresize else np.array(w)
                 del w[0]
 
-    def process_chunck(self, imgs: np.array) -> np.array:
+    def process_chunck(self, imgs) -> np.array:
 
-        if self.bg_mode:
-            median_img = self.median
+        # Fast path: frames are already resized to (3, H, W) by generator_chuncks,
+        # so just stack them (+ median for concat) and normalise. Bit-identical to
+        # the per-frame PIL resize that used to run seq_len times per window.
+        if self.bg_mode in ('', 'concat'):
+            frames = np.concatenate(list(imgs), axis=0).astype(np.float64)
+            if self.bg_mode == 'concat':
+                frames = np.concatenate((self.median, frames), axis=0)
+            frames /= 255.
+            return frames
+
+        # Subtract modes still need the full-resolution frame for differencing.
+        median_img = self.median
         frames = np.array([]).reshape(0, self.HEIGHT, self.WIDTH)
         for i in range(self.seq_len):
             img = Image.fromarray(imgs[i])
@@ -169,16 +190,8 @@ class BallTrajectoryIterable(IterableDataset):
                 img = np.array(img.resize(size=(self.WIDTH, self.HEIGHT)))
                 img = np.moveaxis(img, -1, 0)
                 img = np.concatenate((img, diff_img), axis=0)
-            else:
-                img = np.array(img.resize(size=(self.WIDTH, self.HEIGHT)))
-                img = np.moveaxis(img, -1, 0)
-                
             frames = np.concatenate((frames, img), axis=0)
-            
-        if self.bg_mode == 'concat':
-            frames = np.concatenate((median_img, frames), axis=0)
         frames /= 255.
-
         return frames
 
     def __iter__(self) -> Iterable[np.array]:

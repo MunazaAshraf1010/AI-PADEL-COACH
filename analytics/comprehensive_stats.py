@@ -62,7 +62,12 @@ class ComprehensiveStats:
 
         # Initialize all analyzers
         self.shot_detector = ShotDetector(court_length, court_width)
-        self.rally_analyzer = RallyAnalyzer(court_length, fps)
+        self.rally_analyzer = RallyAnalyzer(court_length, fps, court_width)
+
+        # A player cannot legitimately strike the ball twice within this window.
+        # Without it, ball-position noise near a player registers dozens of
+        # phantom "hits" per second (which produced 500-hit rallies).
+        self._min_hit_gap_frames = max(1, int(0.35 * fps)) if fps > 0 else 9
         self.zone_analyzer = CourtZoneAnalyzer(court_length, court_width)
         self.movement_analyzer = MovementAnalyzer(court_length, court_width, fps)
         self.pressure_analyzer = PressureAnalyzer(court_length, court_width)
@@ -74,6 +79,7 @@ class ComprehensiveStats:
         self._frame_count = 0
         self._ball_positions_history: list[tuple[int, float, float]] = []
         self._last_hitting_player: Optional[int] = None
+        self._last_hit_frame: int = -(10**9)
         self._serve_detected = False
         self._all_player_positions: dict[int, tuple[float, float]] = {}
 
@@ -90,6 +96,7 @@ class ComprehensiveStats:
         self._frame_count = 0
         self._ball_positions_history = []
         self._last_hitting_player = None
+        self._last_hit_frame = -(10**9)
         self._serve_detected = False
         self._all_player_positions = {}
 
@@ -129,17 +136,20 @@ class ComprehensiveStats:
             if len(self._ball_positions_history) > 300:
                 self._ball_positions_history = self._ball_positions_history[-200:]
 
+        # Detect the hitting player ONCE per frame (with a refractory gate) so
+        # rally tracking and shot detection see a single, consistent event.
+        hitting_player = self._detect_hitting_player(
+            frame_index, ball_position, players_positions
+        )
+
         # Rally tracking
         self.rally_analyzer.update(
             frame=frame_index,
             ball_position=ball_position,
-            hitting_player_id=self._detect_hitting_player(
-                ball_position, players_positions
-            ),
+            hitting_player_id=hitting_player,
         )
 
         # Shot detection (when ball is near a player)
-        hitting_player = self._detect_hitting_player(ball_position, players_positions)
         if hitting_player is not None and ball_position is not None and players_positions:
             player_pos = players_positions.get(hitting_player)
             player_kp = players_keypoints.get(hitting_player) if players_keypoints else None
@@ -154,7 +164,10 @@ class ComprehensiveStats:
                     ball_positions_history=self._ball_positions_history,
                     fps=self.fps,
                     pixels_per_meter=self.pixels_per_meter,
-                    is_serving=self._is_serve_situation(frame_index),
+                    # Serves are not guessed live (that mislabels every isolated
+                    # noise-hit as a serve). They are derived from confirmed
+                    # rally openings in _extract_serve_return_stats instead.
+                    is_serving=False,
                 )
 
                 if shot:
@@ -166,27 +179,24 @@ class ComprehensiveStats:
                         all_player_positions=players_positions,
                     )
 
-                    # Highlight detection for fast shots/smashes
-                    if shot.speed_kmh >= self.highlight_generator.HIGH_SPEED_THRESHOLD:
-                        self.highlight_generator.add_fast_shot(
-                            frame_index, hitting_player,
-                            shot.shot_type.value, shot.speed_kmh
-                        )
-                    if shot.shot_type == ShotType.SMASH:
-                        self.highlight_generator.add_smash(
-                            frame_index, hitting_player, shot.speed_kmh
-                        )
-
-                    self._last_hitting_player = hitting_player
+                    # NOTE: highlights are generated once at report time from the
+                    # final shot/rally lists (see generate_from_stats). Adding
+                    # them here too would double-count every fast shot.
 
     def _detect_hitting_player(
         self,
+        frame_index: int,
         ball_position: Optional[tuple[float, float]],
         players_positions: Optional[dict[int, tuple[float, float]]],
     ) -> Optional[int]:
         """
         Detect which player is hitting the ball based on proximity.
-        Returns player_id if ball is close enough to a player, None otherwise.
+
+        Returns a player_id only for a *new* contact: the ball must be within
+        reach of a different player than last time AND at least
+        ``_min_hit_gap_frames`` must have passed since the previous registered
+        hit. This refractory gate is what prevents ball-position jitter near a
+        player from being counted as a flurry of hits.
         """
         if ball_position is None or not players_positions:
             return None
@@ -204,12 +214,20 @@ class ComprehensiveStats:
                 min_distance = distance
                 closest_player = player_id
 
-        if min_distance <= HIT_DISTANCE_THRESHOLD:
-            # Only register if player changed (avoid repeated hits)
-            if closest_player != self._last_hitting_player:
-                return closest_player
+        if min_distance > HIT_DISTANCE_THRESHOLD:
+            return None
 
-        return None
+        # Same player still nearest -> still the same contact, not a new hit.
+        if closest_player == self._last_hitting_player:
+            return None
+
+        # Enforce a minimum gap between consecutive hits.
+        if frame_index - self._last_hit_frame < self._min_hit_gap_frames:
+            return None
+
+        self._last_hitting_player = closest_player
+        self._last_hit_frame = frame_index
+        return closest_player
 
     def _is_serve_situation(self, frame_index: int) -> bool:
         """Detect if current situation is likely a serve"""
@@ -343,8 +361,18 @@ class ComprehensiveStats:
         return result
 
     def _extract_serve_return_stats(self, shot_stats: dict) -> dict:
-        """Extract serve and return statistics"""
-        serves = [s for s in self.shot_detector.shots if s.shot_type == ShotType.SERVE]
+        """
+        Extract serve statistics.
+
+        A serve is the shot that opens a *confirmed* rally, so we match shots to
+        the first-hit frame of each rally the analyzer kept. This keeps the serve
+        count consistent with the rally count (one serve per point) instead of
+        labelling every transient first-contact as a serve.
+        """
+        rally_start_frames = {
+            r.hit_frames[0] for r in self.rally_analyzer.rallies if r.hit_frames
+        }
+        serves = [s for s in self.shot_detector.shots if s.frame in rally_start_frames]
 
         if not serves:
             return {
@@ -387,12 +415,27 @@ class ComprehensiveStats:
         total_errors = rally_stats.get("errors", 0)
         total_hits = shot_stats.get("total_shots", 0)
 
+        # Winners/errors are attributed at the rally level (who hit the last
+        # shot of each point), since per-shot winner/error flags are not set.
+        point_outcomes = rally_stats.get("point_outcomes", {})
+
+        # Rally outcomes may key players as ints while shot stats key them as
+        # strings (or vice versa); look up under both forms.
+        def _outcome(pid):
+            for key in (pid, str(pid)):
+                if key in point_outcomes:
+                    return point_outcomes[key]
+            if str(pid).lstrip("-").isdigit():
+                return point_outcomes.get(int(pid))
+            return None
+
         per_player = {}
         for pid, pdata in shot_stats.get("player_stats", {}).items():
+            outcome = _outcome(pid) or {}
             per_player[pid] = {
                 "total_hits": pdata.get("total_shots", 0),
-                "winners": pdata.get("winners", 0),
-                "errors": pdata.get("errors", 0),
+                "winners": outcome.get("winners", 0),
+                "errors": outcome.get("errors", 0),
                 "hit_rate": round(
                     pdata.get("total_shots", 0) / max(1, total_hits) * 100, 1
                 ),
@@ -402,6 +445,9 @@ class ComprehensiveStats:
             "total_hits": total_hits,
             "total_errors": total_errors,
             "hit_error_ratio": round(total_hits / max(1, total_errors), 2),
+            "loss_breakdown": rally_stats.get(
+                "loss_breakdown", {"net": 0, "wall": 0, "reach": 0}
+            ),
             "per_player": per_player,
         }
 

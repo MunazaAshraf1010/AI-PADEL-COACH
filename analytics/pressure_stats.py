@@ -69,18 +69,28 @@ class PressureAnalyzer:
 
             opp_position = all_player_positions[opp_id]
 
-            # Calculate distance opponent needs to move to reach ball
-            dx = ball_position[0] - opp_position[0]
-            dy = ball_position[1] - opp_position[1]
-            distance_to_ball = math.sqrt(dx**2 + dy**2)
+            # How far the opponent was actually forced to move since the
+            # previous shot. The absolute ball-to-opponent distance is NOT a
+            # pressure signal: opponents stand on the far side of the court, so
+            # that distance is almost always > 2m and reported ~95% "pressure"
+            # for everyone. Real pressure is displacement the shot forces.
+            prev_position = self._prev_opponent_positions.get(opp_id)
+            if prev_position is None:
+                # No baseline yet (first shot we see this opponent) -> skip,
+                # rather than inventing a pressure event.
+                continue
 
-            is_pressure = distance_to_ball >= self.PRESSURE_THRESHOLD_M
+            dx = opp_position[0] - prev_position[0]
+            dy = opp_position[1] - prev_position[1]
+            displacement = math.sqrt(dx**2 + dy**2)
+
+            is_pressure = displacement >= self.PRESSURE_THRESHOLD_M
 
             event = PressureEvent(
                 frame=frame,
                 shooting_player_id=shot_player_id,
                 receiving_player_id=opp_id,
-                opponent_distance_to_move=distance_to_ball,
+                opponent_distance_to_move=displacement,
                 is_pressure_shot=is_pressure,
             )
             self.pressure_events.append(event)

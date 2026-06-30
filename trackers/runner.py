@@ -163,6 +163,18 @@ class Runner:
 
         print("runner: Done") 
 
+    def _canvas_to_court_meters(self, projection) -> tuple[float, float]:
+        """Convert a mini-court canvas-pixel projection to 0-based court metres.
+
+        The projected court occupies `court_position` on the canvas: its pixel
+        width maps to COURT_WIDTH (10m) and its pixel height to COURT_LENGTH (20m).
+        """
+        from constants import COURT_LENGTH, COURT_WIDTH
+        cp = self.projected_court.court_position
+        x_m = (float(projection[0]) - cp.top_left[0]) / cp.width * COURT_WIDTH
+        y_m = (float(projection[1]) - cp.top_left[1]) / cp.height * COURT_LENGTH
+        return (x_m, y_m)
+
     def _feed_comprehensive_stats(
         self,
         frame_index: int,
@@ -191,17 +203,14 @@ class Runner:
                     continue
                     
                 if player.projection is not None:
-                    # Use projected court coordinates (in meters)
-                    players_positions[player.id] = (
-                        float(player.projection[0]),
-                        float(player.projection[1]),
+                    # `projection` is in mini-court CANVAS pixels; convert to
+                    # 0-based court metres so it matches the units the analytics
+                    # modules expect (x in [0, COURT_WIDTH], y in [0, COURT_LENGTH]).
+                    players_positions[player.id] = self._canvas_to_court_meters(
+                        player.projection
                     )
-                else:
-                    # Normalize pixel position (feet) to court dimensions
-                    feet_x, feet_y = player.feet
-                    court_x = (feet_x / frame_w) * COURT_LENGTH
-                    court_y = (feet_y / frame_h) * COURT_WIDTH
-                    players_positions[player.id] = (court_x, court_y)
+                # No homography projection this frame -> skip rather than feed
+                # bogus pixel-normalised coordinates into metre-based analytics.
 
         # Extract player keypoints
         players_keypoints = {}
@@ -217,21 +226,17 @@ class Runner:
                     except (IndexError, AttributeError):
                         pass
 
-        # Extract ball position (use projected coordinates if available)
+        # Extract ball position (projected court metres). Only feed it when the
+        # ball is actually visible and projected - an invisible ball has xy=(0,0)
+        # which would otherwise project to a bogus court location and trigger
+        # phantom "hits".
         ball_position = None
-        if ball_detection is not None:
-            if hasattr(ball_detection, 'projection') and ball_detection.projection is not None:
-                ball_position = (
-                    float(ball_detection.projection[0]),
-                    float(ball_detection.projection[1]),
-                )
-            elif hasattr(ball_detection, 'xy') and ball_detection.xy is not None:
-                # Normalize ball pixel position to court coordinates
-                bx, by = float(ball_detection.xy[0]), float(ball_detection.xy[1])
-                ball_position = (
-                    (bx / frame_w) * COURT_LENGTH,
-                    (by / frame_h) * COURT_WIDTH,
-                )
+        if (
+            ball_detection is not None
+            and getattr(ball_detection, 'projection', None) is not None
+            and getattr(ball_detection, 'visibility', 1)
+        ):
+            ball_position = self._canvas_to_court_meters(ball_detection.projection)
 
         # Feed into comprehensive stats
         self.comprehensive_stats.process_frame(

@@ -171,29 +171,47 @@ class ShotDetector:
             distance_from_net = self.court_length - player_position[1]
         return distance_from_net <= self.VOLLEY_DISTANCE_FROM_NET
 
+    # Hard physical ceiling for a padel ball (~200 km/h). Elite smashes top out
+    # around 110-130 km/h; anything above this is a tracking/projection glitch
+    # (the raw 2D ball detection jumps several metres in a single frame), so we
+    # reject it rather than report 2000 km/h shots.
+    MAX_BALL_SPEED_MS = 55.0
+
     def _calculate_ball_speed(
         self,
         ball_positions: list[tuple[int, float, float]],
         fps: float,
         pixels_per_meter: float = 1.0,
     ) -> float:
-        """Calculate ball speed from recent positions in m/s"""
-        if len(ball_positions) < 2:
+        """
+        Estimate ball speed (m/s) right around contact.
+
+        A single consecutive-frame difference is far too noisy: the projected
+        ball position can teleport metres between frames, which used to yield
+        impossible 600-2000 km/h shots. Instead we look at the last few frames,
+        compute per-frame speeds, discard physically impossible spikes, and take
+        the peak of what remains (the ball's speed just after it is struck).
+        """
+        if len(ball_positions) < 2 or fps <= 0:
             return 0.0
 
-        p1 = ball_positions[-2]
-        p2 = ball_positions[-1]
+        recent = ball_positions[-6:]
+        speeds = []
+        for i in range(1, len(recent)):
+            frame_diff = recent[i][0] - recent[i - 1][0]
+            if frame_diff <= 0:
+                continue
+            dx = (recent[i][1] - recent[i - 1][1]) / pixels_per_meter
+            dy = (recent[i][2] - recent[i - 1][2]) / pixels_per_meter
+            distance = math.sqrt(dx**2 + dy**2)
+            speed = distance / (frame_diff / fps)
+            # Drop frames that imply impossible ball speed (tracking noise).
+            if 0.0 <= speed <= self.MAX_BALL_SPEED_MS:
+                speeds.append(speed)
 
-        frame_diff = p2[0] - p1[0]
-        if frame_diff == 0:
+        if not speeds:
             return 0.0
-
-        dx = (p2[1] - p1[1]) / pixels_per_meter
-        dy = (p2[2] - p1[2]) / pixels_per_meter
-        distance = math.sqrt(dx**2 + dy**2)
-
-        time_elapsed = frame_diff / fps
-        return distance / time_elapsed if time_elapsed > 0 else 0.0
+        return max(speeds)
 
     def _estimate_ball_height_change(
         self,

@@ -11,6 +11,73 @@ from utils import converters
 from trackers.tracker import Object, Tracker, NoPredictFrames
 
 
+class PlayerSlotTracker:
+    """Map unstable detector / ByteTrack IDs onto a fixed set of 4 player slots.
+
+    A padel match always has exactly 4 players, each staying on their own half.
+    ByteTrack assigns a brand-new id every time a player is occluded or briefly
+    leaves the court polygon, so its ids climb well past 4 over a long video and
+    everything with id > 4 was being discarded downstream (data_analysis only
+    keeps ids 1-4). This tracker instead:
+
+      * seeds 4 slots from the first frame that shows exactly 4 players
+        (bottom/near half -> slots 1,2 ; top/far half -> slots 3,4), and
+      * afterwards keeps identity by greedy nearest-neighbour matching on the
+        players' feet position.
+
+    Slots 1,2 vs 3,4 line up with the team split used by the analytics modules.
+    """
+
+    def __init__(self, max_match_dist: float = 400.0):
+        self.slots: dict[int, tuple[float, float]] = {}  # slot_id -> last feet (x, y)
+        self.max_match_dist = max_match_dist
+        self.initialized = False
+
+    def reset(self) -> None:
+        self.slots = {}
+        self.initialized = False
+
+    def _seed(self, feet: list[tuple[float, float]]) -> dict[int, int]:
+        # Requires exactly 4 feet positions. Returns {detection_index: slot_id}.
+        by_y = sorted(range(len(feet)), key=lambda i: feet[i][1])
+        top = sorted(by_y[:2], key=lambda i: feet[i][0])     # far side  -> slots 3,4
+        bottom = sorted(by_y[2:], key=lambda i: feet[i][0])  # near side -> slots 1,2
+        mapping = {bottom[0]: 1, bottom[1]: 2, top[0]: 3, top[1]: 4}
+        for i, sid in mapping.items():
+            self.slots[sid] = feet[i]
+        self.initialized = True
+        return mapping
+
+    def assign(self, feet: list[tuple[float, float]]) -> list[Optional[int]]:
+        """Return a slot id (1-4) or None for each detection, in input order."""
+        result: list[Optional[int]] = [None] * len(feet)
+
+        if not self.initialized:
+            if len(feet) == 4:
+                for i, sid in self._seed(feet).items():
+                    result[i] = sid
+            return result
+
+        # Greedy nearest-neighbour matching between detections and known slots.
+        pairs = []
+        for i, f in enumerate(feet):
+            for sid, sp in self.slots.items():
+                dist = ((f[0] - sp[0]) ** 2 + (f[1] - sp[1]) ** 2) ** 0.5
+                pairs.append((dist, i, sid))
+        pairs.sort(key=lambda x: x[0])
+
+        used_det: set[int] = set()
+        used_slot: set[int] = set()
+        for dist, i, sid in pairs:
+            if i in used_det or sid in used_slot or dist > self.max_match_dist:
+                continue
+            result[i] = sid
+            self.slots[sid] = feet[i]
+            used_det.add(i)
+            used_slot.add(sid)
+        return result
+
+
 class Player:
 
     """
@@ -309,6 +376,9 @@ class TRPlayer(Tracker):
     def video_info_post_init(self, video_info: sv.VideoInfo) -> "TRPlayer":
         self.video_info = video_info
         self.byte_track = sv.ByteTrack(frame_rate=video_info.fps)
+        # Gate matching at ~20% of frame width per frame; generous enough to
+        # re-acquire a player after a short occlusion without cross-matching.
+        self.slot_tracker = PlayerSlotTracker(max_match_dist=0.20 * video_info.width)
         return self
 
     def object(self) -> Type[Object]:
@@ -331,6 +401,8 @@ class TRPlayer(Tracker):
         self.results.restart()
         print(f"{self.__str__()}: Byte tracker reset")
         self.byte_track.reset()
+        if hasattr(self, "slot_tracker"):
+            self.slot_tracker.reset()
 
     def processor(self, frame: np.ndarray) -> np.ndarray:
         return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -368,14 +440,22 @@ class TRPlayer(Tracker):
                 detections=detections,
             )
 
-            predictions.append(
-                Players(
-                    [
-                        Player(detection=detections[i])
-                        for i in range(len(detections))
-                    ]
-                )
-            )
+            players = [
+                Player(detection=detections[i])
+                for i in range(len(detections))
+            ]
+
+            # Remap unstable ByteTrack ids onto stable slots 1-4. Players that
+            # can't be matched to a slot are dropped (keeps exactly the 4 real
+            # players and prevents id > 4 from being discarded downstream).
+            slot_ids = self.slot_tracker.assign([player.feet for player in players])
+            kept = []
+            for player, slot_id in zip(players, slot_ids):
+                if slot_id is not None:
+                    player.id = slot_id
+                    kept.append(player)
+
+            predictions.append(Players(kept))
 
         return predictions
     

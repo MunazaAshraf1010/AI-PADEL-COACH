@@ -191,4 +191,5 @@ if __name__ == "__main__":
             report_path=report_output_path,
             port=dashboard_port,
             open_browser=True,
+            video_path=output_video,
         )

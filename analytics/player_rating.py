@@ -161,9 +161,18 @@ class PlayerRating:
             category="shot_quality",
         ))
 
-        # Winners vs errors
-        winners = player_shot.get("winners", 0)
-        errors = player_shot.get("errors", 0)
+        # Winners vs errors. Per-shot winner/error flags are never set by the
+        # detector, so read the point-level outcomes the rally analyzer assigns
+        # (keyed by player id, which may be int or str). Using the real values
+        # stops every player from scoring a perfect, identical consistency rating.
+        point_outcomes = rally_stats.get("point_outcomes", {})
+        outcome = (
+            point_outcomes.get(player_id)
+            or point_outcomes.get(str(player_id))
+            or {}
+        )
+        winners = outcome.get("winners", 0)
+        errors = outcome.get("errors", 0)
         w_e_ratio = winners / max(1, errors)
         indicators.append(PerformanceIndicator(
             name="winner_error_ratio",
@@ -273,10 +282,17 @@ class PlayerRating:
         ))
 
         # === ERROR INDICATORS (inverted - lower is better) ===
-        total_shots = player_shot.get("total_shots", 1)
-        error_rate = errors / max(1, total_shots)
-        # Invert: lower error rate = higher score
-        error_score = 1.0 - min(1.0, error_rate / self.BENCHMARKS["unforced_error_rate"])
+        # Error rate = errors as a fraction of points this player decided
+        # (points won + points lost). In racket sports roughly half of decided
+        # points end in an error, so we map realistically: <=20% error rate is
+        # elite consistency (score 1.0), >=55% is poor (score 0.0), linear
+        # between. Comparing this to the old 10%-per-shot benchmark zeroed
+        # everyone.
+        points_played = winners + errors
+        error_rate = errors / points_played if points_played > 0 else 0.0
+        ELITE_ERR, POOR_ERR = 0.20, 0.55
+        error_score = 1.0 - (error_rate - ELITE_ERR) / (POOR_ERR - ELITE_ERR)
+        error_score = max(0.0, min(1.0, error_score))
         indicators.append(PerformanceIndicator(
             name="low_error_rate",
             value=max(0, error_score),

@@ -276,17 +276,28 @@ class StrategyAnalyzer:
     def _analyze_rally_performance(self, player_id: int, rally_stats: dict):
         """Analyze rally performance"""
         avg_hits = rally_stats.get("avg_hits_per_rally", 0)
-        errors = rally_stats.get("errors", 0)
-        total = rally_stats.get("total_rallies", 0)
 
-        if total > 0:
-            error_rate = errors / total * 100
-            if error_rate > 40:
+        # Per-player error rate (errors as a share of the points this player
+        # decided), not the match-wide error total — otherwise every player got
+        # the identical "44% error rate" recommendation.
+        point_outcomes = rally_stats.get("point_outcomes", {})
+        outcome = (
+            point_outcomes.get(player_id)
+            or point_outcomes.get(str(player_id))
+            or {}
+        )
+        winners = outcome.get("winners", 0)
+        errors = outcome.get("errors", 0)
+        points_played = winners + errors
+
+        if points_played > 0:
+            error_rate = errors / points_played * 100
+            if error_rate > 50:
                 self.recommendations[player_id].append(Recommendation(
                     area="consistency",
                     suggestion="Reduce unforced errors. Focus on keeping the ball in play before going for winners.",
-                    current_performance=f"{error_rate:.0f}% error rate in rallies",
-                    target_improvement="Target <20% error rate",
+                    current_performance=f"{error_rate:.0f}% of your decided points end in an error",
+                    target_improvement="Target <30% error rate",
                     priority="high",
                 ))
 
