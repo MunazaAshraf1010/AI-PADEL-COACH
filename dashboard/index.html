@@ -533,15 +533,21 @@
 
         /* Videos section */
         .video-container {
-            background: #1e293b;
+            background: #0f172a;
             border-radius: 12px;
-            height: 200px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 14px;
+            overflow: hidden;
             position: relative;
+            max-width: 900px;
+        }
+
+        .video-container video {
+            width: 100%;
+            max-height: 506px;   /* 16:9 of 900px */
+            height: auto;
+            object-fit: contain;
+            background: #000;
+            display: block;
+            border-radius: 12px;
         }
 
         .video-label {
@@ -907,9 +913,9 @@
         <!-- VIDEOS & HIGHLIGHTS -->
         <h2 class="section-title">Match Video</h2>
         <div class="video-container" id="videoWrap">
-            <video id="matchVideo" controls preload="metadata" style="width:100%;border-radius:12px;display:block"
+            <video id="matchVideo" controls preload="metadata" poster="posters/main.jpg"
                    onerror="document.getElementById('videoWrap').innerHTML='<div class=\'no-data\' style=\'padding:40px;text-align:center\'>Match video not available. Re-run the analysis to generate it.</div>'">
-                <source src="/video" type="video/mp4">
+                <source src="/video#t=0.1" type="video/mp4">
                 Your browser does not support video playback.
             </video>
         </div>
@@ -1527,9 +1533,10 @@
         container.innerHTML = highlights.map((h, i) => {
             const start = (h.start_time_s || 0).toFixed(1);
             const end = (h.end_time_s || (h.start_time_s || 0) + 6).toFixed(1);
+            const poster = h.poster || `posters/highlight${i + 1}.jpg`;
             return `
             <div class="highlight-clip">
-                <video controls muted playsinline preload="metadata"
+                <video controls muted playsinline preload="none" poster="${poster}"
                        onerror="this.closest('.highlight-clip').style.display='none'">
                     <source src="/video#t=${start},${end}" type="video/mp4">
                 </video>
