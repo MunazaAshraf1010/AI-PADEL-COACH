@@ -418,6 +418,48 @@
             transform: scale(1.05);
         }
 
+        .highlight-clip {
+            min-width: 240px;
+            max-width: 280px;
+            background: #0f172a;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 1px 4px rgba(15,23,42,0.12);
+        }
+
+        .highlight-clip video {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            background: #000;
+            display: block;
+        }
+
+        .highlight-clip-info {
+            padding: 8px 10px 10px;
+        }
+
+        .highlight-clip-cat {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #38bdf8;
+            font-weight: 700;
+        }
+
+        .highlight-clip-desc {
+            font-size: 12px;
+            color: #e2e8f0;
+            margin-top: 4px;
+            line-height: 1.3;
+        }
+
+        .highlight-clip-time {
+            font-size: 10px;
+            color: #94a3b8;
+            margin-top: 6px;
+        }
+
         /* Objective */
         .objective-box {
             display: flex;
@@ -871,7 +913,7 @@
                 Your browser does not support video playback.
             </video>
         </div>
-        <div class="video-label">Annotated match video — click a highlight below to jump to that moment</div>
+        <div class="video-label">Match video — see the highlight clips below for key moments</div>
 
         <h2 class="section-title">Highlights</h2>
         <div class="highlights-row" id="highlightsRow"></div>
@@ -1471,7 +1513,10 @@
     }
 
     function renderHighlights(data) {
-        const highlights = data.video_highlights?.highlights || [];
+        // Show a few highlights as inline, playable video clips. Each clip uses
+        // an HTML media fragment (#t=start,end) so it plays just that moment of
+        // the annotated match video and shows that frame as its preview.
+        const highlights = (data.video_highlights?.highlights || []).slice(0, 3);
         const container = document.getElementById('highlightsRow');
 
         if (highlights.length === 0) {
@@ -1479,16 +1524,22 @@
             return;
         }
 
-        container.innerHTML = highlights.map((h, i) => `
-            <div class="highlight-thumb" style="background:linear-gradient(135deg, #334155, #1e293b);cursor:pointer"
-                 onclick="seekToHighlight(${h.start_time_s})" title="Jump to ${fmtTime(h.start_time_s)}">
-                <div>
-                    <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#38bdf8">${(h.category || '').replace(/_/g, ' ')}</div>
-                    <div style="font-size:11px;margin-top:6px;line-height:1.3">${h.description || ''}</div>
-                    <div style="font-size:10px;opacity:0.7;margin-top:6px">▶ ${fmtTime(h.start_time_s)}</div>
+        container.innerHTML = highlights.map((h, i) => {
+            const start = (h.start_time_s || 0).toFixed(1);
+            const end = (h.end_time_s || (h.start_time_s || 0) + 6).toFixed(1);
+            return `
+            <div class="highlight-clip">
+                <video controls muted playsinline preload="metadata"
+                       onerror="this.closest('.highlight-clip').style.display='none'">
+                    <source src="/video#t=${start},${end}" type="video/mp4">
+                </video>
+                <div class="highlight-clip-info">
+                    <div class="highlight-clip-cat">${(h.category || '').replace(/_/g, ' ')}</div>
+                    <div class="highlight-clip-desc">${h.description || ''}</div>
+                    <div class="highlight-clip-time">▶ ${fmtTime(h.start_time_s)} – ${fmtTime(h.end_time_s)}</div>
                 </div>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
     }
 
     function renderRecommendations(data) {

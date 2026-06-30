@@ -187,9 +187,14 @@ if __name__ == "__main__":
     # Launch web dashboard
     if launch_dashboard:
         from dashboard_server import start_dashboard
+        # Serve a browser-playable video. The annotated results.mp4 is MPEG-4
+        # Part 2, which browsers can't play in a <video> tag. Prefer a fast-start
+        # H.264 web copy if present (web_match.mp4), else the H.264 input.
+        import os
+        dashboard_video = "web_match.mp4" if os.path.exists("web_match.mp4") else input_video
         start_dashboard(
             report_path=report_output_path,
             port=dashboard_port,
             open_browser=True,
-            video_path=output_video,
+            video_path=dashboard_video,
         )
