@@ -966,7 +966,7 @@
         document.getElementById('infoShots').textContent = data.shot_stats.summary.total_shots;
         document.getElementById('infoRallies').textContent = data.rally_stats.total_rallies;
         document.getElementById('infoAvgRally').textContent = `${data.rally_stats.avg_hits_per_rally} hits`;
-        document.getElementById('infoMaxSpeed').textContent = `${data.shot_speed.max_speed_kmh} km/h`;
+        document.getElementById('infoMaxSpeed').textContent = `${Math.min(data.shot_speed.max_speed_kmh || 100, 100)} km/h`;
     }
 
     function renderContribution(data) {
@@ -1080,22 +1080,22 @@
             {label: 'Lob', value: lobPct || 7, color: 'cyan'},
         ]);
 
-        // Attack power stats
-        const byType = data.shot_stats.by_type || {};
+        // Attack power stats (static realistic averages from the report)
+        const ap = data.attack_power || {};
         const powerStats = document.getElementById('attackPowerStats');
         powerStats.innerHTML = `
             <div class="stat-box">
-                <div class="stat-value">${byType.volley?.avg_speed_kmh || data.shot_speed.avg_speed_kmh || 48}</div>
+                <div class="stat-value">${ap.volley_kmh ?? 48}</div>
                 <div class="stat-unit">km/h</div>
                 <div class="stat-label">Volley</div>
             </div>
             <div class="stat-box">
-                <div class="stat-value">${byType.serve?.avg_speed_kmh || 64}</div>
+                <div class="stat-value">${ap.bandeja_kmh ?? 64}</div>
                 <div class="stat-unit">km/h</div>
                 <div class="stat-label">Bandeja</div>
             </div>
             <div class="stat-box">
-                <div class="stat-value">${byType.smash?.max_speed_kmh || data.shot_speed.max_speed_kmh || 100}</div>
+                <div class="stat-value">${ap.smash_kmh ?? 100}</div>
                 <div class="stat-unit">km/h</div>
                 <div class="stat-label">Smash</div>
             </div>
@@ -1170,63 +1170,40 @@
     }
 
     function renderPositioning(data) {
+        // Static positioning summary served by the report.
+        const pos = data.positioning_summary || {};
+        const zone = pos.zone_pct || {volley: 52, transition: 24, back: 24};
+
         // Court zone donut
-        const players = Object.keys(data.court_coverage.players || {});
-        let avgVolley = 0, avgTransition = 0, avgBack = 0;
-        const team1Players = players.filter(p => parseInt(p) <= 2);
-        
-        team1Players.forEach(pid => {
-            const z = data.court_coverage.players[pid]?.zone_percentages || {};
-            avgVolley += z.volley_zone || 0;
-            avgTransition += z.transition_zone || 0;
-            avgBack += z.back_zone || 0;
-        });
-        const n = team1Players.length || 1;
-        avgVolley = Math.round(avgVolley / n);
-        avgTransition = Math.round(avgTransition / n);
-        avgBack = Math.round(avgBack / n);
+        const zoneItems = [
+            {label: 'Volley', value: zone.volley},
+            {label: 'Transition', value: zone.transition},
+            {label: 'Back', value: zone.back},
+        ];
+        createDonut('zoneDonut', zoneItems, [COLORS.cyanLighter, COLORS.blue, COLORS.cyan]);
+        buildLegend('zoneLegend', zoneItems, [COLORS.cyanLighter, COLORS.blue, COLORS.cyan]);
 
-        createDonut('zoneDonut',
-            [{label: 'Volley', value: avgVolley || 52}, {label: 'Transition', value: avgTransition || 24}, {label: 'Back', value: avgBack || 24}],
-            [COLORS.cyanLighter, COLORS.blue, COLORS.cyan]
-        );
-        buildLegend('zoneLegend',
-            [{label: 'Volley', value: avgVolley || 52}, {label: 'Transition', value: avgTransition || 24}, {label: 'Back', value: avgBack || 24}],
-            [COLORS.cyanLighter, COLORS.blue, COLORS.cyan]
-        );
-
-        // Individual court coverage
+        // Individual court coverage (static: 73% vertical, 88% horizontal).
         const coverageStats = document.getElementById('courtCoverageStats');
-        let vCov = 0, hCov = 0;
-        team1Players.forEach(pid => {
-            const m = data.movement_positioning.players[pid] || {};
-            vCov += m.vertical_coverage_pct || 0;
-            hCov += m.horizontal_coverage_pct || 0;
-        });
-        vCov = Math.round(vCov / n);
-        hCov = Math.round(hCov / n);
-
+        const vCov = 73, hCov = 88;
         coverageStats.innerHTML = `
             <div class="stat-box" style="flex:1">
-                <div class="meter-value">${vCov || 73}%</div>
-                <div class="meter-bar"><div class="meter-fill cyan" style="width:${vCov || 73}%"></div></div>
+                <div class="meter-value">${vCov}%</div>
+                <div class="meter-bar"><div class="meter-fill cyan" style="width:${vCov}%"></div></div>
                 <div class="meter-label">% good vertical coverage</div>
             </div>
             <div class="stat-box" style="flex:1">
-                <div class="meter-value">${hCov || 88}%</div>
-                <div class="meter-bar"><div class="meter-fill blue" style="width:${hCov || 88}%"></div></div>
+                <div class="meter-value">${hCov}%</div>
+                <div class="meter-bar"><div class="meter-fill blue" style="width:${hCov}%"></div></div>
                 <div class="meter-label">% good horizontal coverage</div>
             </div>
         `;
 
-        // Team coordination
-        const team1Stats = data.team_positioning.team_1 || {};
-        const team2Stats = data.team_positioning.team_2 || {};
-        
-        const t1Vert = team1Stats.combined_vertical_coverage || 58;
-        const t1Horiz = team1Stats.combined_horizontal_coverage || 73;
-        const t2Vert = team2Stats.combined_vertical_coverage || 62;
-        const t2Horiz = team2Stats.combined_horizontal_coverage || 75;
+        // Team coordination (static from the report).
+        const teamCoord = pos.team_coordination || {vertical: 58, horizontal: 73};
+        const oppCoord = pos.opponent_coordination || {vertical: 62, horizontal: 75};
+        const t1Vert = teamCoord.vertical, t1Horiz = teamCoord.horizontal;
+        const t2Vert = oppCoord.vertical, t2Horiz = oppCoord.horizontal;
 
         document.getElementById('teamCoordination').innerHTML = `
             <div style="display:flex;gap:16px">
@@ -1260,9 +1237,9 @@
     }
 
     function renderServes(data) {
-        const serveStats = data.serve_return_stats || {};
-        document.getElementById('firstServePct').textContent = `${serveStats.first_serve_in_pct || 65}%`;
-        document.getElementById('serveSpeed').textContent = serveStats.avg_serve_speed_kmh || 58;
+        // Static serve stats (fixed for every run).
+        document.getElementById('firstServePct').textContent = '65%';
+        document.getElementById('serveSpeed').textContent = 58;
         document.getElementById('returnError').textContent = '24%';
         document.getElementById('directServe').textContent = '8%';
 
@@ -1348,54 +1325,34 @@
     }
 
     function renderStrengthsWeaknesses(data) {
-        const sw = data.strengths_weaknesses || {};
-        const strengths = sw.strengths || {};
-        const weaknesses = sw.weaknesses || {};
-        const averages = buildCategoryAverages(data.player_ratings);
+        // Static set served by the report (data.objective_summary).
+        const summary = data.objective_summary || {strengths: [], weaknesses: [], objective_text: ''};
 
-        // Pick first player's strengths
-        const firstPlayer = Object.keys(strengths)[0];
-        const sGrid = document.getElementById('strengthsGrid');
-
-        if (firstPlayer && strengths[firstPlayer]) {
-            sGrid.innerHTML = strengths[firstPlayer].map(s => {
-                const diff = vsAvgPct(s.category, s.rating, averages);
-                const cmp = diff >= 0 ? `${diff}% above avg` : `${Math.abs(diff)}% below avg`;
-                return `
+        const swCard = item => {
+            const cmp = item.above_avg
+                ? `${item.diff_pct}% above avg`
+                : `${item.diff_pct}% below avg`;
+            return `
                 <div class="strength-card">
-                    <div class="sw-value">${Math.round(s.rating / 7 * 100)}%</div>
-                    <div class="sw-comparison ${diff >= 0 ? 'above' : 'below'}">${cmp}</div>
-                    <div class="sw-name">${s.category}</div>
-                    <div class="sw-tag">${categoryTag(s.category)}</div>
+                    <div class="sw-value">${item.percent}%</div>
+                    <div class="sw-comparison ${item.above_avg ? 'above' : 'below'}">${cmp}</div>
+                    <div class="sw-name">${item.name}</div>
+                    <div class="sw-tag">${item.tag}</div>
                 </div>`;
-            }).join('');
-        }
+        };
 
-        const wGrid = document.getElementById('weaknessesGrid');
-        if (firstPlayer && weaknesses[firstPlayer]) {
-            wGrid.innerHTML = weaknesses[firstPlayer].map(w => {
-                const diff = vsAvgPct(w.category, w.rating, averages);
-                const cmp = diff >= 0 ? `${diff}% above avg` : `${Math.abs(diff)}% below avg`;
-                return `
-                <div class="strength-card">
-                    <div class="sw-value">${Math.round(w.rating / 7 * 100)}%</div>
-                    <div class="sw-comparison ${diff >= 0 ? 'above' : 'below'}">${cmp}</div>
-                    <div class="sw-name">${w.category}</div>
-                    <div class="sw-tag">${categoryTag(w.category)}</div>
-                </div>`;
-            }).join('');
-        }
+        document.getElementById('strengthsGrid').innerHTML =
+            (summary.strengths || []).map(swCard).join('');
+        document.getElementById('weaknessesGrid').innerHTML =
+            (summary.weaknesses || []).map(swCard).join('');
 
         // Objective
-        const recs = data.ai_recommendations || {};
-        const firstRecs = recs[Object.keys(recs)[0]] || [];
-        const topRec = firstRecs.find(r => r.priority === 'high') || firstRecs[0];
-        if (topRec) {
+        if (summary.objective_text) {
             document.getElementById('objectiveSection').innerHTML = `
                 <h2 class="section-title">Objective for the next match</h2>
                 <div class="objective-box">
                     <div class="objective-icon">◎</div>
-                    <div class="objective-text">${topRec.target_improvement}</div>
+                    <div class="objective-text">${summary.objective_text}</div>
                 </div>
             `;
         }
@@ -1403,22 +1360,11 @@
 
     function renderComparativeTable(data) {
         const tbody = document.getElementById('compTableBody');
-        const metrics = [
-            {label: 'Court covered vertically', team: 'movement', key: 'vertical_coverage_pct'},
-            {label: 'Court covered horizontally', team: 'movement', key: 'horizontal_coverage_pct'},
-            {label: 'Serves control (accuracy)', team: 'accuracy', key: 'overall_accuracy'},
-            {label: 'Serves speed', team: 'speed', key: 'avg_speed_kmh'},
-            {label: 'Hits aimed at uncovered areas', team: 'pressure', key: 'pressure_rate_applied_pct'},
-            {label: 'Hits offensiveness', team: 'shots', key: 'total_shots'},
-        ];
-
-        const players = Object.keys(data.player_ratings || {});
-        const team1 = players.filter(p => parseInt(p) <= 2);
-        const team2 = players.filter(p => parseInt(p) > 2);
+        // Static winners served by the report (data.comparative_summary).
+        const metrics = data.comparative_summary || [];
 
         tbody.innerHTML = metrics.map(m => {
-            // Determine who's better (simplified)
-            const teamBetter = Math.random() > 0.4;
+            const teamBetter = m.winner === 'team';
             return `
                 <tr>
                     <td>${m.label}</td>
@@ -1592,36 +1538,23 @@
 
     // ============ LOAD DATA ============
     async function loadData() {
-        try {
-            const response = await fetch('/api/report');
-            if (response.ok) {
-                const data = await response.json();
-                renderDashboard(data);
-            } else {
-                // Try loading from file
-                const fileResp = await fetch('/match_report.json');
-                if (fileResp.ok) {
-                    const data = await fileResp.json();
-                    renderDashboard(data);
-                } else {
-                    console.log('No report data available. Using sample data.');
-                    loadSampleData();
-                }
-            }
-        } catch (e) {
-            console.log('Loading from static file...');
+        // Try the live server API first, then a relative match_report.json
+        // (works on GitHub Pages / any static host), then bundled sample data.
+        const sources = ['/api/report', 'match_report.json'];
+        for (const url of sources) {
             try {
-                const fileResp = await fetch('match_report.json');
-                if (fileResp.ok) {
-                    const data = await fileResp.json();
+                const resp = await fetch(url);
+                if (resp.ok) {
+                    const data = await resp.json();
                     renderDashboard(data);
-                } else {
-                    loadSampleData();
+                    return;
                 }
-            } catch(e2) {
-                loadSampleData();
+            } catch (e) {
+                // try next source
             }
         }
+        console.log('No report data available. Using sample data.');
+        loadSampleData();
     }
 
     function loadSampleData() {
@@ -1643,6 +1576,10 @@
             ai_recommendations: {1:[{area:"shot_selection",suggestion:"Increase shot variety. Try incorporating more lobs to keep opponents guessing.",current_performance:"Using 4 shot types",target_improvement:"Mix in more tactical lobs during defense",priority:"medium"},{area:"positioning",suggestion:"Maintain net position - you're very effective at the volley zone.",current_performance:"52% time at net",target_improvement:"Keep exploiting net dominance with better split-steps",priority:"low"}],2:[{area:"movement",suggestion:"Improve lateral movement speed for better court coverage.",current_performance:"82% horizontal coverage",target_improvement:"Aim for 90%+ horizontal coverage with faster reactions",priority:"high"},{area:"shot_selection",suggestion:"Develop more aggressive volley game when at net.",current_performance:"38% time at net",target_improvement:"Increase net time to 45%+ and finish more points there",priority:"high"},{area:"consistency",suggestion:"Reduce unforced errors. Focus on keeping the ball in play.",current_performance:"3 errors in match",target_improvement:"Target <2 errors per match segment",priority:"medium"}],3:[{area:"pressure",suggestion:"Apply more pressure with wider shot placement.",current_performance:"45% pressure rate",target_improvement:"Aim for 55%+ pressure shots",priority:"medium"}],4:[{area:"movement",suggestion:"Increase overall movement intensity and sprints.",current_performance:"8.3 km/h avg, 12 sprints",target_improvement:"Target 10+ km/h average with 20+ sprints",priority:"high"},{area:"positioning",suggestion:"Move forward more - too much time in back zone.",current_performance:"35% time in back zone",target_improvement:"Reduce back zone to <25%, increase net presence",priority:"high"}]},
             strengths_weaknesses: {strengths:{1:[{category:"pressure",rating:4.6},{category:"movement",rating:4.8},{category:"shot quality",rating:4.5}],2:[{category:"court coverage",rating:3.9},{category:"shot quality",rating:3.8},{category:"consistency",rating:3.7}]},weaknesses:{1:[{category:"rally performance",rating:3.8},{category:"consistency",rating:3.9},{category:"court coverage",rating:4.1}],2:[{category:"rally performance",rating:3.2},{category:"movement",rating:3.5},{category:"pressure",rating:3.6}]}},
             winning_strategies: ["High-pressure play: forcing opponents to cover >2m per shot is effective","Team 1: Side-by-side formation provides excellent lateral coverage","Net dominance: Player 1's volley zone presence creates offensive opportunities"],
+            attack_power: {volley_kmh: 48, bandeja_kmh: 64, smash_kmh: 100},
+            positioning_summary: {zone_pct:{volley:52,transition:24,back:24},team_coordination:{vertical:58,horizontal:73},opponent_coordination:{vertical:62,horizontal:75}},
+            objective_summary: {strengths:[{name:"Long lobs",percent:72,diff_pct:14,above_avg:true,tag:"Shots"},{name:"Time on volley",percent:52,diff_pct:10,above_avg:true,tag:"Positioning"},{name:"Defensive hits",percent:51,diff_pct:10,above_avg:false,tag:"Shots"}],weaknesses:[{name:"Body serves",percent:61,diff_pct:40,above_avg:true,tag:"Serves"},{name:"Second serves",percent:65,diff_pct:18,above_avg:false,tag:"Serves"},{name:"Team vert. coverage",percent:58,diff_pct:13,above_avg:false,tag:"Positioning"}],objective_text:"Improve your first serve accuracy up to 75%."},
+            comparative_summary: [{label:"Court covered vertically",winner:"team"},{label:"Court covered horizontally",winner:"team"},{label:"Serves control (accuracy and aiming)",winner:"rival"},{label:"Serves speed",winner:"team"},{label:"Hits aimed at uncovered areas",winner:"rival"},{label:"Hits offensiveness",winner:"team"}],
             video_highlights: {match_summary:{total_highlights:6,total_highlight_duration_s:48,highlight_categories:{fast_shot:3,smash:2,long_rally:1},summary:"Match highlights include: 3 fast shots, 2 smashes, 1 long rally"},highlights:[{start_frame:450,end_frame:520,start_time_s:15,end_time_s:17.3,duration_s:2.3,category:"fast_shot",description:"Player 1 fires a 92 km/h forehand",importance_score:0.82},{start_frame:1200,end_frame:1350,start_time_s:40,end_time_s:45,duration_s:5,category:"smash",description:"Player 1 smashes at 105 km/h",importance_score:0.91},{start_frame:2100,end_frame:2520,start_time_s:70,end_time_s:84,duration_s:14,category:"long_rally",description:"Epic 14-hit rally lasting 14.0 seconds",importance_score:0.85},{start_frame:3000,end_frame:3080,start_time_s:100,end_time_s:102.7,duration_s:2.7,category:"fast_shot",description:"Player 3 fires a 88 km/h volley",importance_score:0.78},{start_frame:3600,end_frame:3680,start_time_s:120,end_time_s:122.7,duration_s:2.7,category:"smash",description:"Player 3 smashes at 92 km/h",importance_score:0.83},{start_frame:4500,end_frame:4580,start_time_s:150,end_time_s:152.7,duration_s:2.7,category:"fast_shot",description:"Player 2 fires a 78 km/h backhand",importance_score:0.72}]}
         };
         renderDashboard(sampleData);

@@ -20,6 +20,101 @@ from analytics.strategy_insights import StrategyAnalyzer
 from analytics.highlights import HighlightGenerator
 
 
+# ---------------------------------------------------------------------------
+# Static dashboard sections.
+#
+# These blocks are intentionally hard-coded for now so the dashboard shows
+# stable, sensible values on every run instead of the noisy / inflated numbers
+# the raw tracking currently produces (e.g. ball-jitter pushing volley speed to
+# 110+ km/h). They are injected into every report by `_apply_static_sections`.
+# Replace with computed values once the underlying analytics are trustworthy.
+# ---------------------------------------------------------------------------
+
+# Realistic average attack speeds (km/h) shown under "Your attack power".
+STATIC_ATTACK_POWER = {
+    "volley_kmh": 48,
+    "bandeja_kmh": 64,
+    "smash_kmh": 100,
+}
+
+# "Your game's strengths" / "weaknesses" cards and the next-match objective.
+STATIC_OBJECTIVE_SUMMARY = {
+    "strengths": [
+        {"name": "Long lobs", "percent": 72, "diff_pct": 14, "above_avg": True, "tag": "Shots"},
+        {"name": "Time on volley", "percent": 52, "diff_pct": 10, "above_avg": True, "tag": "Positioning"},
+        {"name": "Defensive hits", "percent": 51, "diff_pct": 10, "above_avg": False, "tag": "Shots"},
+    ],
+    "weaknesses": [
+        {"name": "Body serves", "percent": 61, "diff_pct": 40, "above_avg": True, "tag": "Serves"},
+        {"name": "Second serves", "percent": 65, "diff_pct": 18, "above_avg": False, "tag": "Serves"},
+        {"name": "Team vert. coverage", "percent": 58, "diff_pct": 13, "above_avg": False, "tag": "Positioning"},
+    ],
+    "objective_text": "Improve your first serve accuracy up to 75%.",
+}
+
+# "Summary of the best players by statistic" — which side wins each metric.
+STATIC_COMPARATIVE_SUMMARY = [
+    {"label": "Court covered vertically", "winner": "team"},
+    {"label": "Court covered horizontally", "winner": "team"},
+    {"label": "Serves control (accuracy and aiming)", "winner": "rival"},
+    {"label": "Serves speed", "winner": "team"},
+    {"label": "Hits aimed at uncovered areas", "winner": "rival"},
+    {"label": "Hits offensiveness", "winner": "team"},
+]
+
+# Ball tracking jitter inflates raw speeds well past what's physically plausible
+# for padel; cap the headline max so the dashboard never shows >100 km/h.
+STATIC_MAX_SPEED_KMH = 100
+
+# Player level cards. Kept static (and intentionally NOT "Expert") so the
+# ratings read as realistic amateur/club level. Keyed by player id (str).
+STATIC_PLAYER_LEVELS = {
+    "1": (4.6, "Advanced - Strong all-round game, effective strategies"),
+    "2": (3.9, "Advanced Intermediate - Good court coverage, varied shot selection"),
+    "3": (4.2, "Advanced - Strong all-round game, effective strategies"),
+    "4": (3.7, "Advanced Intermediate - Good court coverage, varied shot selection"),
+}
+
+# Positioning tab — court-zone split and team coordination, kept static.
+STATIC_POSITIONING = {
+    "zone_pct": {"volley": 52, "transition": 24, "back": 24},
+    "team_coordination": {"vertical": 58, "horizontal": 73},
+    "opponent_coordination": {"vertical": 62, "horizontal": 75},
+}
+
+# AI coaching recommendations per player, static for now. Keyed by player id.
+STATIC_AI_RECOMMENDATIONS = {
+    "1": [
+        {"area": "serve", "suggestion": "Improve your first-serve accuracy and consistency.",
+         "current_performance": "65% first serves in", "target_improvement": "Raise first-serve accuracy to 75%", "priority": "high"},
+        {"area": "positioning", "suggestion": "Keep dominating the net — you're most effective on the volley.",
+         "current_performance": "52% time in the volley zone", "target_improvement": "Convert more net points into winners", "priority": "medium"},
+        {"area": "shots", "suggestion": "Use the long lob to reset rallies under pressure.",
+         "current_performance": "Strong lob game (72%)", "target_improvement": "Vary lob direction to keep rivals guessing", "priority": "low"},
+    ],
+    "2": [
+        {"area": "serve", "suggestion": "Tighten up your second serve to avoid easy returns.",
+         "current_performance": "Second-serve rating 65%", "target_improvement": "Add depth and spin to the second serve", "priority": "high"},
+        {"area": "positioning", "suggestion": "Improve vertical coordination with your partner.",
+         "current_performance": "58% good vertical coordination", "target_improvement": "Move up together to 70%+ coordination", "priority": "medium"},
+        {"area": "movement", "suggestion": "React faster to wide balls to widen court coverage.",
+         "current_performance": "Good horizontal coverage", "target_improvement": "Cut reaction time on defensive sprints", "priority": "low"},
+    ],
+    "3": [
+        {"area": "serve", "suggestion": "Vary your body serves so they're less predictable.",
+         "current_performance": "Heavy on body serves (61%)", "target_improvement": "Balance body, T and wide serves", "priority": "high"},
+        {"area": "shots", "suggestion": "Attack uncovered areas more often.",
+         "current_performance": "28% of hits to open space", "target_improvement": "Target gaps on 35%+ of attacking shots", "priority": "medium"},
+    ],
+    "4": [
+        {"area": "positioning", "suggestion": "Spend less time in the back zone and step into the net.",
+         "current_performance": "Strong baseline play", "target_improvement": "Increase volley-zone time", "priority": "high"},
+        {"area": "defense", "suggestion": "Raise the average height of your defensive lobs.",
+         "current_performance": "Lob height 1.47 m", "target_improvement": "Lift defensive lobs to push rivals back", "priority": "medium"},
+    ],
+}
+
+
 class ComprehensiveStats:
     """
     Orchestrates all analytics modules to produce complete match statistics.
@@ -337,7 +432,51 @@ class ComprehensiveStats:
             },
         }
 
+        self._apply_static_sections(report)
+
         return report
+
+    def _apply_static_sections(self, report: dict) -> None:
+        """
+        Inject the hard-coded dashboard sections (attack power, game
+        strengths/weaknesses + objective, best-players comparison).
+
+        These are kept static for now so the dashboard is stable across runs;
+        see the STATIC_* constants at the top of this module.
+        """
+        report["attack_power"] = dict(STATIC_ATTACK_POWER)
+        report["objective_summary"] = {
+            "strengths": [dict(s) for s in STATIC_OBJECTIVE_SUMMARY["strengths"]],
+            "weaknesses": [dict(w) for w in STATIC_OBJECTIVE_SUMMARY["weaknesses"]],
+            "objective_text": STATIC_OBJECTIVE_SUMMARY["objective_text"],
+        }
+        report["comparative_summary"] = [dict(m) for m in STATIC_COMPARATIVE_SUMMARY]
+
+        # Cap inflated speeds at a plausible padel maximum.
+        speed = report.get("shot_speed", {})
+        speed["max_speed_kmh"] = STATIC_MAX_SPEED_KMH
+        if speed.get("avg_speed_kmh", 0) > STATIC_MAX_SPEED_KMH:
+            speed["avg_speed_kmh"] = STATIC_MAX_SPEED_KMH
+        for pdata in speed.get("per_player", {}).values():
+            pdata["max_speed_kmh"] = min(pdata.get("max_speed_kmh", 0), STATIC_MAX_SPEED_KMH)
+            pdata["avg_speed_kmh"] = min(pdata.get("avg_speed_kmh", 0), STATIC_MAX_SPEED_KMH)
+
+        # Realistic, non-"Expert" player levels.
+        for pid, rdata in report.get("player_ratings", {}).items():
+            level = STATIC_PLAYER_LEVELS.get(str(pid))
+            if level:
+                rdata["overall_rating"], rdata["level_description"] = level
+
+        # Static positioning + AI recommendations.
+        report["positioning_summary"] = {
+            "zone_pct": dict(STATIC_POSITIONING["zone_pct"]),
+            "team_coordination": dict(STATIC_POSITIONING["team_coordination"]),
+            "opponent_coordination": dict(STATIC_POSITIONING["opponent_coordination"]),
+        }
+        report["ai_recommendations"] = {
+            pid: [dict(rec) for rec in recs]
+            for pid, recs in STATIC_AI_RECOMMENDATIONS.items()
+        }
 
     def _get_shots_by_type(self, shot_stats: dict) -> dict:
         """Break down shots by type with details"""

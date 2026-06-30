@@ -15,6 +15,13 @@ from urllib.parse import urlparse
 import threading
 
 
+class ThreadingHTTPServer(socketserver.ThreadingTCPServer):
+    """Handle each request in its own thread so a long video stream doesn't
+    block the dashboard's other requests (report fetch, static files)."""
+    daemon_threads = True
+    allow_reuse_address = True
+
+
 DASHBOARD_DIR = Path(__file__).resolve().parent / "dashboard"
 REPORT_FILE = "match_report.json"
 PORT = 8080
@@ -166,14 +173,14 @@ def start_dashboard(
     handler = create_handler(report_path, video_path)
 
     if background:
-        server = socketserver.TCPServer(("", port), handler)
+        server = ThreadingHTTPServer(("", port), handler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         if open_browser:
             webbrowser.open(f"http://localhost:{port}")
         return server
     else:
-        with socketserver.TCPServer(("", port), handler) as httpd:
+        with ThreadingHTTPServer(("", port), handler) as httpd:
             if open_browser:
                 # Open browser after a small delay
                 def _open():
